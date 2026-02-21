@@ -1,7 +1,9 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
+
 import dateutil.parser
 
-def get_user_commits(client, user, projects):
+
+def get_user_commits(client, user, projects, since=None, until=None):
     """
     Fetches commits for a user across given projects.
     Filters by author name/email because GitLab repository commits API
@@ -17,9 +19,9 @@ def get_user_commits(client, user, projects):
     seen_shas = set()
 
     # Use name and email for stricter filtering
-    author_name = user.get('name')
-    author_email = user.get('email')
-    username = user.get('username')
+    author_name = user.get("name")
+    author_email = user.get("email")
+    username = user.get("username")
 
     # Define IST timezone (+5:30)
     ist = timezone(timedelta(hours=5, minutes=30))
@@ -32,38 +34,47 @@ def get_user_commits(client, user, projects):
 
     stats = {
         "total": 0,
-        "morning_commits": 0,   # 09:30 AM – 12:30 PM
-        "afternoon_commits": 0  # 02:00 PM – 05:00 PM
+        "morning_commits": 0,  # 09:30 AM – 12:30 PM
+        "afternoon_commits": 0,  # 02:00 PM – 05:00 PM
     }
 
     for project in projects:
         try:
-            pid = project.get('id')
-            pname = project.get('name_with_namespace')
+            pid = project.get("id")
+            pname = project.get("name_with_namespace")
 
-            # Fetch commits
+            # Fetch commits — apply date filter at API level when provided
+            api_params: dict = {"author": author_name or username, "all": True}
+            if since:
+                api_params["since"] = since
+            if until:
+                api_params["until"] = until
+
             commits_data = client._get_paginated(
                 f"/projects/{pid}/repository/commits",
-                params={"author": author_name or username, "all": True},
+                params=api_params,
                 per_page=50,
-                max_pages=20
+                max_pages=20,
             )
 
             if commits_data:
                 valid_project_commits = 0
                 for c in commits_data:
-                    sha = c.get('id')
+                    sha = c.get("id")
 
                     # Validation
-                    c_author_name = c.get('author_name')
-                    c_author_email = c.get('author_email')
+                    c_author_name = c.get("author_name")
+                    c_author_email = c.get("author_email")
 
                     is_match = False
                     if author_name and c_author_name == author_name:
                         is_match = True
                     elif author_email and c_author_email == author_email:
                         is_match = True
-                    elif username and (username in str(c_author_name).lower() or username in str(c_author_email).lower()):
+                    elif username and (
+                        username in str(c_author_name).lower()
+                        or username in str(c_author_email).lower()
+                    ):
                         is_match = True
 
                     if not is_match:
@@ -78,7 +89,7 @@ def get_user_commits(client, user, projects):
                     stats["total"] += 1
 
                     # Parse and Convert to IST
-                    created_at_str = c.get('created_at')
+                    created_at_str = c.get("created_at")
                     try:
                         dt_utc = dateutil.parser.isoparse(created_at_str)
                         dt_ist = dt_utc.replace(tzinfo=timezone.utc).astimezone(ist)
@@ -100,19 +111,21 @@ def get_user_commits(client, user, projects):
                         time_str = "N/A"
                         slot = "N/A"
 
-                    all_commits.append({
-                        "project_name": pname,
-                        "message": c.get('title'),
-                        "date": date_str,
-                        "time": time_str,
-                        "slot": slot,
-                        "author_name": c_author_name,
-                        "short_id": c.get('short_id')
-                    })
+                    all_commits.append(
+                        {
+                            "project_name": pname,
+                            "message": c.get("title"),
+                            "date": date_str,
+                            "time": time_str,
+                            "slot": slot,
+                            "author_name": c_author_name,
+                            "short_id": c.get("short_id"),
+                        }
+                    )
 
                 project_commit_counts[pid] = valid_project_commits
 
-        except Exception as e:
+        except Exception:
             pass
 
     return all_commits, project_commit_counts, stats
