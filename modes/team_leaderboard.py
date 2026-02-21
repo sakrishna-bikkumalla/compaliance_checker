@@ -36,9 +36,12 @@ def _init_state() -> None:
         "teams": [],
         "edit_team_index": None,
         "_lb_show_create_form": False,
+        "_lb_show_upload_form": False,
         "_lb_draft_members": [],
         "_lb_edit_draft": {},
         "_lb_triggered": False,
+        "_lb_date_since": None,  # ISO 8601 UTC string or None
+        "_lb_date_until": None,  # ISO 8601 UTC string or None
     }
     for key, default in defaults.items():
         if key not in st.session_state:
@@ -48,6 +51,68 @@ def _init_state() -> None:
 # ---------------------------------------------------------------------------
 # Pure Logic Helpers
 # ---------------------------------------------------------------------------
+
+
+def _render_date_filter() -> tuple[str | None, str | None]:
+    """
+    Render the date range filter UI.
+    Returns (since_iso, until_iso) — both are ISO 8601 UTC strings or None.
+    Shows an active filter badge; provides a Clear Filter button.
+    """
+    import datetime as _dt
+
+    st.markdown("### 📅 Date Range Filter")
+    col_from, col_to, col_clear = st.columns([2, 2, 1])
+
+    with col_from:
+        from_date = st.date_input(
+            "From Date",
+            value=None,
+            key="_lb_from_date",
+            help="Leave blank to fetch full history",
+        )
+    with col_to:
+        to_date = st.date_input(
+            "To Date",
+            value=None,
+            key="_lb_to_date",
+            help="Leave blank to fetch full history",
+        )
+    with col_clear:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("✖ Clear Filter", key="_lb_clear_dates"):
+            st.session_state["_lb_date_since"] = None
+            st.session_state["_lb_date_until"] = None
+            st.session_state["_lb_triggered"] = False
+            st.rerun()
+
+    since_iso: str | None = None
+    until_iso: str | None = None
+
+    if from_date and to_date:
+        if from_date > to_date:
+            st.warning("⚠️  **From Date** must be before or equal to **To Date**.")
+        else:
+            # Convert to UTC ISO 8601 covering the full calendar days
+            utc = _dt.timezone.utc
+            since_iso = _dt.datetime.combine(from_date, _dt.time.min, tzinfo=utc).isoformat()
+            until_iso = _dt.datetime.combine(to_date, _dt.time.max, tzinfo=utc).isoformat()
+
+            st.info(
+                f"🗓 Filtering from **{from_date}** to **{to_date}** (UTC).  "
+                "Commits, MRs and Issues will be scoped to this range."
+            )
+    elif from_date or to_date:
+        st.warning("Select both **From Date** and **To Date** to apply a filter.")
+    else:
+        st.caption("No date filter applied — showing full history.")
+
+    # Persist to session_state so it survives reruns
+    st.session_state["_lb_date_since"] = since_iso
+    st.session_state["_lb_date_until"] = until_iso
+
+    st.divider()
+    return since_iso, until_iso
 
 
 def _calculate_score(
@@ -157,21 +222,189 @@ def _build_excel_export(team_data: dict) -> bytes:
 
 
 # ---------------------------------------------------------------------------
+# UI: JSON Bulk Upload
+# ---------------------------------------------------------------------------
+
+
+def _validate_json_teams(raw: dict) -> tuple[list[dict] | None, str]:
+    """
+    Validate parsed JSON against the expected teams schema.
+    Returns (teams_list, "") on success or (None, error_message) on failure.
+    """
+    if not isinstance(raw, dict) or "teams" not in raw:
+        return None, 'JSON must be an object containing a "teams" key.'
+
+    teams = raw["teams"]
+    if not isinstance(teams, list):
+        return None, '"teams" must be a list.'
+    if not teams:
+        return None, '"teams" list is empty.'
+
+    existing_names = {t["team_name"].strip().lower() for t in st.session_state["teams"]}
+    seen_names: set[str] = set()
+
+    for ti, team in enumerate(teams, start=1):
+        tname = team.get("team_name", "")
+        pname = team.get("project_name", "")
+        members = team.get("members", [])
+
+        if not isinstance(tname, str) or not tname.strip():
+            return None, f'Team #{ti}: "team_name" is missing or empty.'
+        if not isinstance(pname, str) or not pname.strip():
+            return None, f'Team #{ti} ({tname}): "project_name" is missing or empty.'
+        if not isinstance(members, list) or not members:
+            return None, f'Team #{ti} ({tname}): "members" must be a non-empty list.'
+
+        norm = tname.strip().lower()
+        if norm in existing_names:
+            return None, f'Team "{tname}" already exists in the current session.'
+        if norm in seen_names:
+            return None, f'Duplicate team name "{tname}" found in the uploaded file.'
+        seen_names.add(norm)
+
+        seen_usernames: set[str] = set()
+        for mi, member in enumerate(members, start=1):
+            mname = member.get("name", "")
+            musername = member.get("username", "")
+            if not isinstance(musername, str) or not musername.strip():
+                return None, (
+                    f'Team "{tname}", member #{mi}: "username" is missing or empty.'
+                )
+            if not isinstance(mname, str):
+                return None, (
+                    f'Team "{tname}", member #{mi}: "name" must be a string.'
+                )
+            ukey = musername.strip().lower()
+            if ukey in seen_usernames:
+                return None, (
+                    f'Team "{tname}": duplicate username "{musername}".'
+                )
+            seen_usernames.add(ukey)
+
+    return teams, ""
+
+
+def _render_json_upload() -> None:
+    """
+    Render the JSON bulk-upload section inside an expander.
+    Appends validated teams to st.session_state["teams"].
+    """
+    import json
+
+    with st.expander("📂 Upload JSON File", expanded=True):
+        st.markdown(
+            "Upload a `.json` file to import multiple teams at once. "
+            "Existing teams will **not** be overwritten."
+        )
+        _SAMPLE_JSON = (
+            "{"
+            + '\n  "teams": ['
+            + '\n    {'
+            + '\n      "team_name": "Team Alpha",'
+            + '\n      "project_name": "Project A",'
+            + '\n      "members": ['
+            + '\n        { "name": "John", "username": "john123" }'
+            + '\n      ]'
+            + '\n    }'
+            + '\n  ]'
+            + '\n}'
+        )
+        st.code(_SAMPLE_JSON, language="json")
+
+        uploaded = st.file_uploader(
+            "Choose a JSON file",
+            type=["json"],
+            key="_lb_json_uploader",
+            label_visibility="collapsed",
+        )
+
+        if uploaded is None:
+            return
+
+        st.caption(f"📄 Uploaded: **{uploaded.name}**")
+
+        raw_bytes = uploaded.read()
+        if not raw_bytes:
+            st.error("The uploaded file is empty.")
+            return
+
+        try:
+            raw_data = json.loads(raw_bytes.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            st.error(f"Could not parse JSON: {exc}")
+            return
+
+        teams_to_add, err = _validate_json_teams(raw_data)
+        if err:
+            st.error(f"Validation error: {err}")
+            return
+
+        # Normalise member dicts (ensure user_id key exists)
+        clean_teams = [
+            {
+                "team_name":    t["team_name"].strip(),
+                "project_name": t["project_name"].strip(),
+                "members": [
+                    {
+                        "name":     m.get("name", "").strip(),
+                        "username": m["username"].strip(),
+                        "user_id":  m.get("user_id") or None,
+                    }
+                    for m in t["members"]
+                ],
+            }
+            for t in teams_to_add
+        ]
+
+        st.session_state["teams"].extend(clean_teams)
+        st.session_state["_lb_show_upload_form"] = False
+        st.session_state["_lb_triggered"] = False
+        st.success(
+            f"✅ {len(clean_teams)} team(s) imported successfully: "
+            + ", ".join(f'**{t["team_name"]}**' for t in clean_teams)
+        )
+        st.rerun()
+
+
+# ---------------------------------------------------------------------------
 # UI: Create Team Form
 # ---------------------------------------------------------------------------
 
 
 def _render_create_team_form() -> None:
     """Expandable form for creating a brand-new team."""
-    # Don't show create form while an edit is active
+    # Don't show either form while an edit is active
     if st.session_state.get("edit_team_index") is not None:
         return
 
-    btn_label = "✖ Cancel" if st.session_state["_lb_show_create_form"] else "➕ Create New Team"
-    if st.button(btn_label, key="_lb_toggle_form"):
-        st.session_state["_lb_show_create_form"] = not st.session_state["_lb_show_create_form"]
-        st.session_state["_lb_draft_members"] = []
-        st.rerun()
+    # Two-button header: Create | Upload JSON
+    btn_col1, btn_col2 = st.columns([1, 1])
+
+    with btn_col1:
+        create_label = (
+            "✖ Cancel" if st.session_state["_lb_show_create_form"] else "➕ Create New Team"
+        )
+        if st.button(create_label, key="_lb_toggle_form", use_container_width=True):
+            st.session_state["_lb_show_create_form"] = not st.session_state["_lb_show_create_form"]
+            st.session_state["_lb_show_upload_form"] = False  # close the other panel
+            st.session_state["_lb_draft_members"] = []
+            st.rerun()
+
+    with btn_col2:
+        upload_label = (
+            "✖ Cancel Upload" if st.session_state["_lb_show_upload_form"]
+            else "📂 Add All Teams Using JSON"
+        )
+        if st.button(upload_label, key="_lb_toggle_upload", use_container_width=True):
+            st.session_state["_lb_show_upload_form"] = not st.session_state["_lb_show_upload_form"]
+            st.session_state["_lb_show_create_form"] = False  # close the other panel
+            st.session_state["_lb_draft_members"] = []
+            st.rerun()
+
+    # Show whichever panel is active
+    if st.session_state["_lb_show_upload_form"]:
+        _render_json_upload()
+        return
 
     if not st.session_state["_lb_show_create_form"]:
         return
@@ -561,6 +794,9 @@ def render_team_leaderboard(client) -> None:
         st.info("💡 Finish editing the team above before running analysis.")
         return
 
+    # ── Date range filter ─────────────────────────────────────────────────
+    since_iso, until_iso = _render_date_filter()
+
     if st.button("▶️ Run Leaderboard Analysis", type="primary", key="_lb_run_btn"):
         st.session_state["_lb_triggered"] = True
 
@@ -584,7 +820,12 @@ def render_team_leaderboard(client) -> None:
 
         with st.spinner(f"Fetching **{team_name}** ({len(usernames)} member(s))…"):
             try:
-                results = process_batch_users(client, usernames)
+                results = process_batch_users(
+                    client,
+                    usernames,
+                    since=since_iso,
+                    until=until_iso,
+                )
             except Exception as exc:
                 st.warning(f"⚠️ Could not fetch data for **{team_name}**: {exc}")
                 results = []
