@@ -1,5 +1,6 @@
-import streamlit as st
 import os
+
+import streamlit as st
 from dotenv import load_dotenv
 
 # --- Page Config ---
@@ -14,17 +15,19 @@ load_dotenv()
 
 # Import local modules
 try:
-    from gitlab_utils.client import GitLabClient
     from gitlab_utils import users
+    from gitlab_utils.client import GitLabClient
+    from modes.batch_mode import render_batch_mode_ui
 
     # New UI Modules
     from modes.compliance_mode import render_compliance_mode
+    from modes.team_leaderboard import render_team_leaderboard
     from modes.user_profile import render_user_profile
-    from modes.batch_mode import render_batch_mode_ui
 
 except ImportError as e:
     st.error(f"Import Error: {e}")
     st.stop()
+
 
 def main():
     st.title("GitLab Compliance & Analytics Tool")
@@ -46,6 +49,7 @@ def main():
             "User Profile Overview",
             "Batch 2026 ICFAI",
             "Batch 2026 RCTS",
+            "🏆 Team Leaderboard",
         ],
     )
 
@@ -85,13 +89,17 @@ def main():
             if user_info:
                 render_user_profile(client, user_info)
             else:
-                 st.error(f"User '{user_input}' not found.")
+                st.error(f"User '{user_input}' not found.")
 
     elif mode == "Batch 2026 ICFAI":
         render_batch_mode_ui(client, "ICFAI")
 
     elif mode == "Batch 2026 RCTS":
         render_batch_mode_ui(client, "RCTS")
+
+    elif mode == "🏆 Team Leaderboard":
+        render_team_leaderboard(client)
+
 
 if __name__ == "__main__":
     main()
