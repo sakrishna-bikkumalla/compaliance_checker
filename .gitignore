@@ -1,38 +1,7 @@
-# Dependencies
 node_modules/
 venv/
-.venv/
-env/
-
-# Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.egg-info/
-.eggs/
-dist/
-build/
-.pytest_cache/
-.coverage
-htmlcov/
-*.log
-
-# Environment variables
-.env
-.env.*
-*.env
-
-# Streamlit
 .streamlit/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# IDE
-.idea/
-
-# Reports / output
-reports/
-output/
+*.pyc
+.env
+.venv/
