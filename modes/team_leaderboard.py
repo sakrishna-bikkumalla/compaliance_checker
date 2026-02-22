@@ -5,7 +5,7 @@ Supports creating and editing teams via UI with full session state persistence.
 Fetches analytics via process_batch_users() and renders a ranked leaderboard.
 
 Score formula:
-    score = (total_commits * 1) + (merged_mrs * 5) + (total_mrs * 2) + (issues_closed * 3)
+    score = (merged_mrs * 5) + (total_commits * 1) + (issues_closed * 2.5)
 
 Session state keys (all prefixed _lb_ except "teams" and "edit_team_index"):
     "teams"                   — master list of saved team dicts
@@ -121,6 +121,7 @@ def _render_date_filter() -> tuple[str | None, str | None]:
     return since_iso, until_iso
 
 
+<<<<<<< HEAD
 def _render_project_filter(client) -> int | None:
     """
     Render UI for project-wise filtering.
@@ -172,8 +173,11 @@ def _render_project_filter(client) -> int | None:
 def _calculate_score(
     total_commits: int, merged_mrs: int, total_mrs: int, issues_closed: int
 ) -> int:
+=======
+def _calculate_score(total_commits: int, merged_mrs: int, issues_closed: int) -> float:
+>>>>>>> d5c741d (Updated Scoring Formula — Team Leaderboard)
     """Return individual productivity score."""
-    return total_commits * 1 + merged_mrs * 5 + total_mrs * 2 + issues_closed * 3
+    return merged_mrs * 5 + total_commits * 1 + issues_closed * 2.5
 
 
 def _extract_member_row(result: dict) -> dict:
@@ -222,7 +226,7 @@ def _extract_member_row(result: dict) -> dict:
         "Issues Raised": i.get("total", 0),
         "Issues Closed": issues_closed,
         "Groups": len(data.get("groups", [])),
-        "Score": _calculate_score(total_commits, merged_mrs, total_mrs, issues_closed),
+        "Score": _calculate_score(total_commits, merged_mrs, issues_closed),
     }
 
 
@@ -321,18 +325,12 @@ def _validate_json_teams(raw: dict) -> tuple[list[dict] | None, str]:
             mname = member.get("name", "")
             musername = member.get("username", "")
             if not isinstance(musername, str) or not musername.strip():
-                return None, (
-                    f'Team "{tname}", member #{mi}: "username" is missing or empty.'
-                )
+                return None, (f'Team "{tname}", member #{mi}: "username" is missing or empty.')
             if not isinstance(mname, str):
-                return None, (
-                    f'Team "{tname}", member #{mi}: "name" must be a string.'
-                )
+                return None, (f'Team "{tname}", member #{mi}: "name" must be a string.')
             ukey = musername.strip().lower()
             if ukey in seen_usernames:
-                return None, (
-                    f'Team "{tname}": duplicate username "{musername}".'
-                )
+                return None, (f'Team "{tname}": duplicate username "{musername}".')
             seen_usernames.add(ukey)
 
     return teams, ""
@@ -353,15 +351,15 @@ def _render_json_upload() -> None:
         _SAMPLE_JSON = (
             "{"
             + '\n  "teams": ['
-            + '\n    {'
+            + "\n    {"
             + '\n      "team_name": "Team Alpha",'
             + '\n      "project_name": "Project A",'
             + '\n      "members": ['
             + '\n        { "name": "John", "username": "john123" }'
-            + '\n      ]'
-            + '\n    }'
-            + '\n  ]'
-            + '\n}'
+            + "\n      ]"
+            + "\n    }"
+            + "\n  ]"
+            + "\n}"
         )
         st.code(_SAMPLE_JSON, language="json")
 
@@ -396,13 +394,13 @@ def _render_json_upload() -> None:
         # Normalise member dicts (ensure user_id key exists)
         clean_teams = [
             {
-                "team_name":    t["team_name"].strip(),
+                "team_name": t["team_name"].strip(),
                 "project_name": t["project_name"].strip(),
                 "members": [
                     {
-                        "name":     m.get("name", "").strip(),
+                        "name": m.get("name", "").strip(),
                         "username": m["username"].strip(),
-                        "user_id":  m.get("user_id") or None,
+                        "user_id": m.get("user_id") or None,
                     }
                     for m in t["members"]
                 ],
@@ -415,7 +413,7 @@ def _render_json_upload() -> None:
         st.session_state["_lb_triggered"] = False
         st.success(
             f"✅ {len(clean_teams)} team(s) imported successfully: "
-            + ", ".join(f'**{t["team_name"]}**' for t in clean_teams)
+            + ", ".join(f"**{t['team_name']}**" for t in clean_teams)
         )
         st.rerun()
 
@@ -446,7 +444,8 @@ def _render_create_team_form() -> None:
 
     with btn_col2:
         upload_label = (
-            "✖ Cancel Upload" if st.session_state["_lb_show_upload_form"]
+            "✖ Cancel Upload"
+            if st.session_state["_lb_show_upload_form"]
             else "📂 Add All Teams Using JSON"
         )
         if st.button(upload_label, key="_lb_toggle_upload", use_container_width=True):
@@ -824,7 +823,7 @@ def render_team_leaderboard(client) -> None:
     st.subheader("🏆 Team Leaderboard")
     st.markdown(
         "Create and manage teams, then run analytics to compare productivity scores.\n\n"
-        "**Score formula:** `Commits × 1 + Merged MRs × 5 + Total MRs × 2 + Issues Closed × 3`"
+        "**Score formula:** `Merged MRs × 5 + Commits × 1 + Issues Closed × 2.5`"
     )
     st.divider()
 
