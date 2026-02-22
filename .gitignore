@@ -1,10 +1,5 @@
-# Dependencies
 node_modules/
 venv/
-.venv/
-env/
-
-# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -24,14 +19,6 @@ htmlcov/
 
 # Streamlit
 .streamlit/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# IDE
-.idea/
-
-# Reports / output
-reports/
-output/
+*.pyc
+.env
+.venv/
