@@ -47,7 +47,7 @@ def _init_state() -> None:
         "_lb_date_since": None,  # ISO 8601 UTC string or None
         "_lb_date_until": None,  # ISO 8601 UTC string or None
         "_lb_project_id": None,  # Resolved int or None
-        "_lb_project_input": "", # Raw string input
+        "_lb_project_input": "",  # Raw string input
     }
     for key, default in defaults.items():
         if key not in st.session_state:
@@ -121,7 +121,6 @@ def _render_date_filter() -> tuple[str | None, str | None]:
     return since_iso, until_iso
 
 
-<<<<<<< HEAD
 def _render_project_filter(client) -> int | None:
     """
     Render UI for project-wise filtering.
@@ -170,12 +169,7 @@ def _render_project_filter(client) -> int | None:
     return st.session_state["_lb_project_id"]
 
 
-def _calculate_score(
-    total_commits: int, merged_mrs: int, total_mrs: int, issues_closed: int
-) -> int:
-=======
 def _calculate_score(total_commits: int, merged_mrs: int, issues_closed: int) -> float:
->>>>>>> d5c741d (Updated Scoring Formula — Team Leaderboard)
     """Return individual productivity score."""
     return merged_mrs * 5 + total_commits * 1 + issues_closed * 2.5
 
@@ -859,25 +853,19 @@ def render_team_leaderboard(client) -> None:
     # ── Active filters display (read-only, updates on every rerun) ────────
     _active_filters: list[str] = []
 
-    # Date filter — only show when both bounds are set (matches _render_date_filter logic)
+    # Date filter — only show when both bounds are set
     if since_iso and until_iso:
-        # Extract human-readable dates from the ISO strings (first 10 chars = YYYY-MM-DD)
         _from_str = since_iso[:10]
         _to_str = until_iso[:10]
         _active_filters.append(f"• 📅 Date: **{_from_str}** → **{_to_str}**")
 
-    # Project filter — report any teams that have a project scope set
-    _scoped_projects = sorted(
-        {t["project_name"].strip() for t in teams if t.get("project_name", "").strip()}
-    )
-    if _scoped_projects:
-        _proj_label = ", ".join(f"`{p}`" for p in _scoped_projects)
-        _active_filters.append(f"• 🗂 Project scope: {_proj_label}")
+    # Project filter — use resolved project_id from _render_project_filter
+    if bool(project_id):
+        _proj_label = st.session_state.get("_lb_project_input", str(project_id))
+        _active_filters.append(f"• 🗂 Project: **{_proj_label}** (ID: `{project_id}`)")
 
     if _active_filters:
-        st.markdown(
-            "🔎 **Active Filters:**\n\n" + "\n\n".join(_active_filters),
-        )
+        st.markdown("🔎 **Active Filters:**\n\n" + "\n\n".join(_active_filters))
     else:
         st.info("🔎 **Active Filters:** None (Showing full history across all projects)")
 
