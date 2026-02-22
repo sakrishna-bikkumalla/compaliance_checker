@@ -46,6 +46,9 @@ def _init_state() -> None:
         "_lb_triggered": False,
         "_lb_date_since": None,  # ISO 8601 UTC string or None
         "_lb_date_until": None,  # ISO 8601 UTC string or None
+        "_lb_from_date": None,  # date input value or None
+        "_lb_to_date": None,  # date input value or None
+        "_lb_clear_dates_requested": False,  # one-shot flag to clear date widgets safely
         "_lb_project_id": None,  # Resolved int or None
         "_lb_project_input": "",  # Raw string input
     }
@@ -67,6 +70,15 @@ def _render_date_filter() -> tuple[str | None, str | None]:
     """
     import datetime as _dt
 
+    # Clear date-related UI + backend state before rendering widgets.
+    # This avoids stale widget values surviving across reruns.
+    if st.session_state.get("_lb_clear_dates_requested"):
+        st.session_state["_lb_from_date"] = None
+        st.session_state["_lb_to_date"] = None
+        st.session_state["_lb_date_since"] = None
+        st.session_state["_lb_date_until"] = None
+        st.session_state["_lb_clear_dates_requested"] = False
+
     st.markdown("### 📅 Date Range Filter")
     col_from, col_to, col_clear = st.columns([2, 2, 1])
 
@@ -87,9 +99,7 @@ def _render_date_filter() -> tuple[str | None, str | None]:
     with col_clear:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("✖ Clear Filter", key="_lb_clear_dates"):
-            st.session_state["_lb_date_since"] = None
-            st.session_state["_lb_date_until"] = None
-            st.session_state["_lb_triggered"] = False
+            st.session_state["_lb_clear_dates_requested"] = True
             st.rerun()
 
     since_iso: str | None = None
