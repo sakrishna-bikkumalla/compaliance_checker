@@ -97,3 +97,82 @@ def process_batch_users(client, usernames, since=None, until=None):
                 results.append({"username": u, "status": "Crash", "error": str(e)})
 
     return results
+
+
+def process_single_user_project_filtered(client, username, project_id, since=None, until=None):
+    """
+    Isolated pipeline for processing a user within a specific project.
+    """
+    username = username.strip()
+    result = {"username": username, "status": "Success", "error": None, "data": {}}
+
+    if not username:
+        return None
+
+    try:
+        # 1. Get User
+        user_obj = users.get_user_by_username(client, username)
+        if not user_obj:
+            result["status"] = "Not Found"
+            result["error"] = "User not found"
+            return result
+
+        user_id = user_obj["id"]
+        result["data"]["user"] = user_obj
+
+        # 2. Commits (Project Filtered)
+        user_commits, commit_stats = commits.get_user_commits_project(
+            client, project_id, username, since=since, until=until
+        )
+        result["data"]["commits"] = user_commits
+        result["data"]["commit_stats"] = commit_stats
+
+        # 3. MRs (Project Filtered)
+        user_mrs, mr_stats = merge_requests.get_user_mrs_project(
+            client, project_id, user_id, since=since, until=until
+        )
+        result["data"]["mrs"] = user_mrs
+        result["data"]["mr_stats"] = mr_stats
+
+        # 4. Issues (Project Filtered)
+        user_issues, issue_stats = issues.get_user_issues_project(
+            client, project_id, user_id, since=since, until=until
+        )
+        result["data"]["issues"] = user_issues
+        result["data"]["issue_stats"] = issue_stats
+
+        # 5. Empty Groups for consistency
+        result["data"]["groups"] = []
+
+    except Exception as e:
+        result["status"] = "Error"
+        result["error"] = str(e)
+
+    return result
+
+
+def process_batch_users_project_filtered(client, usernames, project_id, since=None, until=None):
+    """
+    Parallel implementation of project-filtered processing.
+    """
+    results = []
+    clean_usernames = [u.strip() for u in usernames if u.strip()]
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_user = {
+            executor.submit(
+                process_single_user_project_filtered, client, u, project_id, since, until
+            ): u
+            for u in clean_usernames
+        }
+
+        for future in concurrent.futures.as_completed(future_to_user):
+            try:
+                res = future.result()
+                if res:
+                    results.append(res)
+            except Exception as e:
+                u = future_to_user[future]
+                results.append({"username": u, "status": "Crash", "error": str(e)})
+
+    return results
