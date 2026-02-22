@@ -1,3 +1,118 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+from urllib.parse import quote, urlparse
+
+
+@dataclass
+class ResolvedProject:
+    project_id: int
+    project_path: str | None
+    encoded_path: str | None
+    project: Any
+
+
+class ProjectResolutionError(Exception):
+    def __init__(self, message: str, kind: str = "unknown"):
+        super().__init__(message)
+        self.kind = kind
+
+
+def _unwrap_gitlab_client(client_or_wrapper: Any) -> Any:
+    if hasattr(client_or_wrapper, "projects"):
+        return client_or_wrapper
+
+    inner = getattr(client_or_wrapper, "client", None)
+    if inner is not None and hasattr(inner, "projects"):
+        return inner
+
+    raise ProjectResolutionError("GitLab client is not initialized.", kind="client_error")
+
+
+def normalize_project_input(project_input: str) -> tuple[int | None, str | None, str | None]:
+    raw = (project_input or "").strip()
+    if not raw:
+        raise ProjectResolutionError("Project input cannot be empty.", kind="invalid_input")
+
+    if raw.isdigit():
+        return int(raw), None, None
+
+    parsed = urlparse(raw)
+    if parsed.scheme and parsed.netloc:
+        path = (parsed.path or "").strip("/")
+    else:
+        path = raw.strip("/")
+
+    if path.endswith(".git"):
+        path = path[:-4]
+
+    path = path.strip("/")
+    if not path:
+        raise ProjectResolutionError(
+            "Invalid project input. Provide a project URL, path, or numeric ID.",
+            kind="invalid_input",
+        )
+
+    return None, path, quote(path, safe="")
+
+
+def _status_code_from_exception(exc: Exception) -> int | None:
+    response_code = getattr(exc, "response_code", None)
+    if isinstance(response_code, int):
+        return response_code
+
+    response = getattr(exc, "response", None)
+    if response is not None:
+        status_code = getattr(response, "status_code", None)
+        if isinstance(status_code, int):
+            return status_code
+
+    return None
+
+
+def _classify_resolution_error(exc: Exception) -> ProjectResolutionError:
+    status = _status_code_from_exception(exc)
+    if status == 404:
+        return ProjectResolutionError("Project Not Found", kind="not_found")
+    if status in (401, 403):
+        return ProjectResolutionError(
+            "Permission denied. Token does not have access to this project.",
+            kind="permission_denied",
+        )
+    return ProjectResolutionError(f"Failed to resolve project: {exc}", kind="unknown")
+
+
+def resolve_project(client_or_wrapper: Any, project_input: str) -> ResolvedProject:
+    gl_client = _unwrap_gitlab_client(client_or_wrapper)
+    numeric_id, project_path, encoded_path = normalize_project_input(project_input)
+
+    try:
+        if numeric_id is not None:
+            project = gl_client.projects.get(numeric_id)
+            return ResolvedProject(
+                project_id=int(project.id),
+                project_path=getattr(project, "path_with_namespace", None),
+                encoded_path=None,
+                project=project,
+            )
+
+        project_data = gl_client.http_get(f"/projects/{encoded_path}")
+        resolved_id = int(project_data["id"])
+        project = gl_client.projects.get(resolved_id)
+        return ResolvedProject(
+            project_id=resolved_id,
+            project_path=project_path,
+            encoded_path=encoded_path,
+            project=project,
+        )
+
+    except ProjectResolutionError:
+        raise
+    except Exception as exc:
+        raise _classify_resolution_error(exc) from exc
+
+
 def get_user_projects(client, user_id, username):
     """
     Fetches all projects for a user and classifies them into Personal and Contributed.

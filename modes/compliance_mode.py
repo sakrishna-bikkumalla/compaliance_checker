@@ -1,10 +1,5 @@
 import streamlit as st
-import os
-import requests
-import http.client
-import time
-from gitlab import GitlabGetError
-from urllib.parse import urlparse
+from gitlab_utils.projects import ProjectResolutionError, resolve_project
 
 # --- Helper Functions (copied/adapted from app.py) ---
 
@@ -15,34 +10,6 @@ def read_file_content(_project, file_path, ref):
         return file.decode().decode("utf-8")
     except Exception:
         return None
-
-def get_project_with_retries(gl_client, path_or_id, retries=3, backoff=1):
-    last_exc = None
-    for attempt in range(1, retries + 1):
-        try:
-            return gl_client.projects.get(
-                int(path_or_id) if str(path_or_id).isdigit() else path_or_id
-            )
-        except GitlabGetError as e:
-            last_exc = e
-            if getattr(e, "response", None) is not None and e.response.status_code == 404:
-                raise
-            if attempt == retries:
-                raise
-        except (
-            ConnectionResetError,
-            ConnectionAbortedError,
-            requests.exceptions.RequestException,
-            OSError,
-            http.client.RemoteDisconnected,
-        ) as e:
-            last_exc = e
-            if attempt == retries:
-                raise
-            sleep_for = backoff * (2 ** (attempt - 1))
-            time.sleep(sleep_for)
-    if last_exc:
-        raise last_exc
 
 def check_vscode_settings(project, branch="main"):
     try:
@@ -224,13 +191,6 @@ def check_project_compliance(project, branch=None):
         report["error"] = f"Error during compliance check: {e}"
     return report
 
-def extract_path_from_url(input_str):
-    try:
-        path = urlparse(input_str).path.strip("/")
-        return path[:-4] if path.endswith(".git") else path
-    except Exception:
-        return input_str.strip()
-
 def get_project_branches(project):
     try:
         branches = project.branches.list(all=True)
@@ -342,12 +302,19 @@ def render_compliance_mode(gl_client):
             st.session_state['compliance_project_id'] = project_input
             try:
                 with st.spinner("Fetching project..."):
-                    pid = extract_path_from_url(project_input)
-                    project = get_project_with_retries(gl_client, pid)
+                    resolved = resolve_project(gl_client, project_input)
+                    project = resolved.project
                     st.session_state['current_project'] = project
                     st.session_state['current_project_branches'] = get_project_branches(project)
                     st.success(f"Loaded: **{project.name_with_namespace}**")
                     st.rerun()
+            except ProjectResolutionError as e:
+                if e.kind == "not_found":
+                    st.error("Project Not Found: verify the URL/path/ID.")
+                elif e.kind == "permission_denied":
+                    st.error("Permission denied: your token cannot access this project.")
+                else:
+                    st.error(str(e))
             except Exception as e:
                 st.error(f"Error fetching project: {e}")
 
@@ -391,8 +358,8 @@ def render_batch_project_compliance_internal(gl_client):
 
         for i, line in enumerate(lines):
             try:
-                pid = extract_path_from_url(line)
-                project = get_project_with_retries(gl_client, pid)
+                resolved = resolve_project(gl_client, line)
+                project = resolved.project
                 report = check_project_compliance(project)
 
                 # Summarize for table
@@ -412,6 +379,8 @@ def render_batch_project_compliance_internal(gl_client):
 
                 results.append(row)
 
+            except ProjectResolutionError as e:
+                results.append({"Project": line, "Error": str(e)})
             except Exception as e:
                 results.append({"Project": line, "Error": str(e)})
 

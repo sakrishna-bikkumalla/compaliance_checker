@@ -23,7 +23,11 @@ import io
 import pandas as pd
 import streamlit as st
 
-from gitlab_utils.batch import process_batch_users
+from gitlab_utils.batch import (
+    process_batch_users,
+    process_batch_users_project_filtered,
+)
+from gitlab_utils.projects import ProjectResolutionError, resolve_project
 
 # ---------------------------------------------------------------------------
 # Session State Bootstrap
@@ -42,6 +46,8 @@ def _init_state() -> None:
         "_lb_triggered": False,
         "_lb_date_since": None,  # ISO 8601 UTC string or None
         "_lb_date_until": None,  # ISO 8601 UTC string or None
+        "_lb_project_id": None,  # Resolved int or None
+        "_lb_project_input": "", # Raw string input
     }
     for key, default in defaults.items():
         if key not in st.session_state:
@@ -113,6 +119,54 @@ def _render_date_filter() -> tuple[str | None, str | None]:
 
     st.divider()
     return since_iso, until_iso
+
+
+def _render_project_filter(client) -> int | None:
+    """
+    Render UI for project-wise filtering.
+    Validates Project ID or GitLab URL. Returns resolved project_id or None.
+    """
+    st.markdown("### 📂 Project Filter")
+    project_input = st.text_input(
+        "Enter Project ID, path, or GitLab Project URL",
+        value=st.session_state.get("_lb_project_input", ""),
+        placeholder="e.g. 123456 or group/subgroup/project or https://gitlab.com/group/project.git",
+        help="Leave empty to analyze across all projects.",
+        key="_lb_project_input_widget",
+    )
+
+    # Persist raw input
+    st.session_state["_lb_project_input"] = project_input.strip()
+
+    if not st.session_state["_lb_project_input"]:
+        st.session_state["_lb_project_id"] = None
+        st.caption("No project filter applied — searching across all projects.")
+        st.divider()
+        return None
+
+    try:
+        resolved = resolve_project(client, st.session_state["_lb_project_input"])
+        st.session_state["_lb_project_id"] = resolved.project_id
+        st.success(
+            f"✅ Filtering by Project: **{resolved.project.name_with_namespace}** "
+            f"(ID: {resolved.project_id})"
+        )
+    except ProjectResolutionError as e:
+        if e.kind == "not_found":
+            st.error("Project Not Found: verify URL/path/ID.")
+        elif e.kind == "permission_denied":
+            st.error("Permission denied: token does not have access to this project.")
+        else:
+            st.error(str(e))
+        st.session_state["_lb_project_id"] = None
+        return None
+    except Exception as e:
+        st.error(f"Error resolving project: {e}")
+        st.session_state["_lb_project_id"] = None
+        return None
+
+    st.divider()
+    return st.session_state["_lb_project_id"]
 
 
 def _calculate_score(
@@ -797,6 +851,9 @@ def render_team_leaderboard(client) -> None:
     # ── Date range filter ─────────────────────────────────────────────────
     since_iso, until_iso = _render_date_filter()
 
+    # ── Project filter ───────────────────────────────────────────────────
+    project_id = _render_project_filter(client)
+
     if st.button("▶️ Run Leaderboard Analysis", type="primary", key="_lb_run_btn"):
         st.session_state["_lb_triggered"] = True
 
@@ -820,12 +877,21 @@ def render_team_leaderboard(client) -> None:
 
         with st.spinner(f"Fetching **{team_name}** ({len(usernames)} member(s))…"):
             try:
-                results = process_batch_users(
-                    client,
-                    usernames,
-                    since=since_iso,
-                    until=until_iso,
-                )
+                if project_id:
+                    results = process_batch_users_project_filtered(
+                        client,
+                        usernames,
+                        project_id,
+                        since=since_iso,
+                        until=until_iso,
+                    )
+                else:
+                    results = process_batch_users(
+                        client,
+                        usernames,
+                        since=since_iso,
+                        until=until_iso,
+                    )
             except Exception as exc:
                 st.warning(f"⚠️ Could not fetch data for **{team_name}**: {exc}")
                 results = []

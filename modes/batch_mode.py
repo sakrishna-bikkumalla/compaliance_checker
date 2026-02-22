@@ -3,6 +3,7 @@ import pandas as pd
 import io
 import datetime
 from gitlab_utils import batch
+from gitlab_utils.projects import ProjectResolutionError, resolve_project
 
 DEFAULT_ICFAI_USERS = """saikrishna_b
 MohanaSriBhavitha
@@ -54,6 +55,12 @@ def render_batch_mode_ui(client, report_type):
         placeholder="user1\nuser2\n..."
     )
 
+    project_input = st.text_input(
+        "Optional Project Filter (ID, path, or URL)",
+        placeholder="12345 or group/subgroup/project or https://gitlab.com/group/project.git",
+        help="Leave empty to analyze all projects.",
+    ).strip()
+
     if st.button("Run Batch Analysis"):
         usernames = [line.strip() for line in user_input.splitlines() if line.strip()]
         if not usernames:
@@ -62,8 +69,31 @@ def render_batch_mode_ui(client, report_type):
 
         st.info(f"Processing {len(usernames)} users...")
 
+        project_id = None
+        if project_input:
+            try:
+                resolved = resolve_project(client, project_input)
+                project_id = resolved.project_id
+                st.success(
+                    f"Project filter applied: {resolved.project.name_with_namespace} (ID: {project_id})"
+                )
+            except ProjectResolutionError as e:
+                if e.kind == "not_found":
+                    st.error("Project Not Found: verify URL/path/ID.")
+                elif e.kind == "permission_denied":
+                    st.error("Permission denied: token does not have access to this project.")
+                else:
+                    st.error(str(e))
+                return
+            except Exception as e:
+                st.error(f"Error resolving project: {e}")
+                return
+
         with st.spinner("Fetching data in parallel..."):
-            results = batch.process_batch_users(client, usernames)
+            if project_id is not None:
+                results = batch.process_batch_users_project_filtered(client, usernames, project_id)
+            else:
+                results = batch.process_batch_users(client, usernames)
 
         st.success("Batch processing complete!")
 

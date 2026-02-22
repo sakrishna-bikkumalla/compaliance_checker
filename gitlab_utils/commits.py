@@ -129,3 +129,87 @@ def get_user_commits(client, user, projects, since=None, until=None):
             pass
 
     return all_commits, project_commit_counts, stats
+
+
+def get_user_commits_project(client, project_id, username, since=None, until=None):
+    """
+    Fetches commits for a user from ONE SPECIFIC project.
+    Used for project-scoped analytics without discovery.
+
+    Returns:
+      - commits_list: List of commit dicts
+      - stats: Dict {total, morning_commits, afternoon_commits}
+    """
+    commits_list = []
+    stats = {
+        "total": 0,
+        "morning_commits": 0,
+        "afternoon_commits": 0,
+    }
+
+    # Define IST timezone (+5:30)
+    ist = timezone(timedelta(hours=5, minutes=30))
+
+    # Define slot boundary times for comparison
+    morn_start = datetime.strptime("09:30", "%H:%M").time()
+    morn_end = datetime.strptime("12:30", "%H:%M").time()
+    aft_start = datetime.strptime("14:00", "%H:%M").time()
+    aft_end = datetime.strptime("17:00", "%H:%M").time()
+
+    try:
+        # Fetch commits — projects/{id}/repository/commits
+        api_params: dict = {"author": username, "all": True}
+        if since:
+            api_params["since"] = since
+        if until:
+            api_params["until"] = until
+
+        commits_data = client._get_paginated(
+            f"/projects/{project_id}/repository/commits",
+            params=api_params,
+            per_page=50,
+            max_pages=20,
+        )
+
+        for c in commits_data:
+            stats["total"] += 1
+
+            # Parse and Convert to IST
+            created_at_str = c.get("created_at")
+            try:
+                dt_utc = dateutil.parser.isoparse(created_at_str)
+                dt_ist = dt_utc.replace(tzinfo=timezone.utc).astimezone(ist)
+
+                date_str = dt_ist.strftime("%Y-%m-%d")
+                time_str = dt_ist.strftime("%I:%M %p")
+                t_obj = dt_ist.time()
+
+                slot = "Other"
+                if t_obj >= morn_start and t_obj < morn_end:
+                    slot = "Morning"
+                    stats["morning_commits"] += 1
+                elif t_obj >= aft_start and t_obj <= aft_end:
+                    slot = "Afternoon"
+                    stats["afternoon_commits"] += 1
+
+            except Exception:
+                date_str = created_at_str
+                time_str = "N/A"
+                slot = "N/A"
+
+            commits_list.append(
+                {
+                    "project_id": project_id,
+                    "message": c.get("title"),
+                    "date": date_str,
+                    "time": time_str,
+                    "slot": slot,
+                    "author_name": c.get("author_name"),
+                    "short_id": c.get("short_id"),
+                }
+            )
+
+    except Exception:
+        pass
+
+    return commits_list, stats

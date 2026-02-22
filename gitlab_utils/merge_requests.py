@@ -71,3 +71,56 @@ def get_user_mrs(client, user_id, since=None, until=None):
     fetch_and_add({"assignee_id": user_id, "scope": "all"}, "Assigned")
 
     return mrs_list, stats
+
+
+def get_user_mrs_project(client, project_id, user_id, since=None, until=None):
+    """
+    Fetch Merge Requests for a SPECIFIC project and author.
+    Endpoint: /projects/{pid}/merge_requests
+    """
+    mrs_list = []
+    stats = {
+        "total": 0,
+        "merged": 0,
+        "closed": 0,
+        "opened": 0,
+        "pending": 0,
+    }
+
+    try:
+        params: dict = {"author_id": user_id, "scope": "all"}
+        if since:
+            params["created_after"] = since
+        if until:
+            params["created_before"] = until
+
+        items = client._get_paginated(
+            f"/projects/{project_id}/merge_requests", params=params, per_page=50, max_pages=10
+        )
+
+        for item in items:
+            state = item.get("state")
+            mrs_list.append(
+                {
+                    "title": item.get("title"),
+                    "project_id": project_id,
+                    "web_url": item.get("web_url"),
+                    "state": state,
+                    "created_at": item.get("created_at"),
+                    "role": "Authored",
+                }
+            )
+
+            stats["total"] += 1
+            if state == "merged":
+                stats["merged"] += 1
+            elif state == "closed":
+                stats["closed"] += 1
+            elif state == "opened":
+                stats["opened"] += 1
+                stats["pending"] += 1
+
+    except Exception:
+        pass
+
+    return mrs_list, stats
