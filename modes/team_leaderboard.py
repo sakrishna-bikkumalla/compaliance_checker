@@ -52,7 +52,7 @@ def _init_state() -> None:
         "_lb_to_date": None,  # date input value or None
         "_lb_clear_dates_requested": False,  # one-shot flag to clear date widgets safely
         "_lb_project_id": None,  # Resolved int or None
-        "_lb_project_input": "", # Raw string input
+        "_lb_project_input": "",  # Raw string input
         "_lb_page": "Workspace",
         "_lb_last_ranking_rows": [],
     }
@@ -135,7 +135,6 @@ def _render_date_filter() -> tuple[str | None, str | None]:
     return since_iso, until_iso
 
 
-<<<<<<< HEAD
 def _render_project_filter(client) -> int | None:
     """
     Render UI for project-wise filtering.
@@ -184,12 +183,7 @@ def _render_project_filter(client) -> int | None:
     return st.session_state["_lb_project_id"]
 
 
-def _calculate_score(
-    total_commits: int, merged_mrs: int, total_mrs: int, issues_closed: int
-) -> int:
-=======
 def _calculate_score(total_commits: int, merged_mrs: int, issues_closed: int) -> float:
->>>>>>> d5c741d (Updated Scoring Formula — Team Leaderboard)
     """Return individual productivity score."""
     return merged_mrs * 5 + total_commits * 1 + issues_closed * 2.5
 
@@ -997,7 +991,7 @@ def _render_ranking_table_html(ranked_rows: list[dict]) -> None:
       </tr>
     </thead>
     <tbody>
-      {''.join(table_rows)}
+      {"".join(table_rows)}
     </tbody>
   </table>
 </div>
