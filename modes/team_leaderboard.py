@@ -200,8 +200,10 @@ def _extract_member_row(result: dict) -> dict:
             "MR Merged": 0,
             "MR Open": 0,
             "MR Closed": 0,
+            "Assigned MRs": 0,
             "Issues Raised": 0,
             "Issues Closed": 0,
+            "Assigned Issues": 0,
             "Groups": 0,
             "Score": 0,
             "Error": result.get("error", "Unknown error"),
@@ -227,8 +229,10 @@ def _extract_member_row(result: dict) -> dict:
         "MR Merged": merged_mrs,
         "MR Open": m.get("opened", 0),
         "MR Closed": m.get("closed", 0),
+        "Assigned MRs": m.get("assigned_mrs", 0),
         "Issues Raised": i.get("total", 0),
         "Issues Closed": issues_closed,
+        "Assigned Issues": i.get("assigned_issues", 0),
         "Groups": len(data.get("groups", [])),
         "Score": _calculate_score(total_commits, merged_mrs, issues_closed),
     }
@@ -244,8 +248,10 @@ def _aggregate_team_totals(member_rows: list[dict]) -> dict:
         "MR Merged": 0,
         "MR Open": 0,
         "MR Closed": 0,
+        "Assigned MRs": 0,
         "Issues Raised": 0,
         "Issues Closed": 0,
+        "Assigned Issues": 0,
         "Team Score": 0,
     }
     for row in member_rows:
@@ -762,8 +768,10 @@ def _render_team_result(
         "MR Merged",
         "MR Open",
         "MR Closed",
+        "Assigned MRs",
         "Issues Raised",
         "Issues Closed",
+        "Assigned Issues",
         "Groups",
         "Score",
     ]
