@@ -1,8 +1,12 @@
-def get_user_mrs(client, user_id):
+def get_user_mrs(client, user_id, since=None, until=None):
     """
     Fetch Merge Requests:
     - Authored MRs (GET /merge_requests?author_id=:id)
     - Assigned MRs (GET /merge_requests?assignee_id=:id)
+
+    Optional date filters:
+      since (str): ISO 8601 UTC datetime — maps to created_after
+      until (str): ISO 8601 UTC datetime — maps to created_before
 
     Returns:
       - mrs_list: List of MR dicts
@@ -15,29 +19,39 @@ def get_user_mrs(client, user_id):
         "total": 0,
         "merged": 0,
         "closed": 0,
-        "opened": 0, # "opened" acts as Pending often
-        "pending": 0 # Explicit pending check if needed (usually 'opened')
+        "opened": 0,
+        "pending": 0,
     }
 
-    # helper to fetch and process
-    def fetch_and_add(params, role_label):
+    # Build optional date filter fragment added to every request
+    date_params: dict = {}
+    if since:
+        date_params["created_after"] = since
+    if until:
+        date_params["created_before"] = until
+
+    def fetch_and_add(base_params: dict, role_label: str) -> None:
         try:
-            items = client._get_paginated("/merge_requests", params=params, per_page=50, max_pages=10)
+            params = {**base_params, **date_params}
+            items = client._get_paginated(
+                "/merge_requests", params=params, per_page=50, max_pages=10
+            )
             for item in items:
-                if item['id'] not in seen_ids:
-                    state = item.get("state") # opened, closed, merged, locked
+                if item["id"] not in seen_ids:
+                    state = item.get("state")
 
-                    mrs_list.append({
-                        "title": item.get("title"),
-                        "project_id": item.get("project_id"),
-                        "web_url": item.get("web_url"),
-                        "state": state,
-                        "created_at": item.get("created_at"),
-                        "role": role_label
-                    })
-                    seen_ids.add(item['id'])
+                    mrs_list.append(
+                        {
+                            "title": item.get("title"),
+                            "project_id": item.get("project_id"),
+                            "web_url": item.get("web_url"),
+                            "state": state,
+                            "created_at": item.get("created_at"),
+                            "role": role_label,
+                        }
+                    )
+                    seen_ids.add(item["id"])
 
-                    # Update Stats
                     stats["total"] += 1
                     if state == "merged":
                         stats["merged"] += 1
