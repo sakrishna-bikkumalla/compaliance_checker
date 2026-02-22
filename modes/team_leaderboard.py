@@ -1078,6 +1078,31 @@ def render_team_leaderboard(client) -> None:
     if st.button("▶️ Run Leaderboard Analysis", type="primary", key="_lb_run_btn"):
         st.session_state["_lb_triggered"] = True
 
+    # ── Active filters display (read-only, updates on every rerun) ────────
+    _active_filters: list[str] = []
+
+    # Date filter — only show when both bounds are set (matches _render_date_filter logic)
+    if since_iso and until_iso:
+        # Extract human-readable dates from the ISO strings (first 10 chars = YYYY-MM-DD)
+        _from_str = since_iso[:10]
+        _to_str = until_iso[:10]
+        _active_filters.append(f"• 📅 Date: **{_from_str}** → **{_to_str}**")
+
+    # Project filter — report any teams that have a project scope set
+    _scoped_projects = sorted(
+        {t["project_name"].strip() for t in teams if t.get("project_name", "").strip()}
+    )
+    if _scoped_projects:
+        _proj_label = ", ".join(f"`{p}`" for p in _scoped_projects)
+        _active_filters.append(f"• 🗂 Project scope: {_proj_label}")
+
+    if _active_filters:
+        st.markdown(
+            "🔎 **Active Filters:**\n\n" + "\n\n".join(_active_filters),
+        )
+    else:
+        st.info("🔎 **Active Filters:** None (Showing full history across all projects)")
+
     if not st.session_state.get("_lb_triggered"):
         st.info("Click **▶️ Run Leaderboard Analysis** to fetch data for all teams.")
         return
