@@ -861,6 +861,7 @@ def _load_rank_badge_svg(rank: int) -> str:
 
     repo_root = Path(__file__).resolve().parent.parent
     candidate_dirs = [
+        repo_root / "badges",
         repo_root / "assets" / "badges",
         Path.home() / "Downloads" / "final badges",
         Path.home() / "Downloads" / "badges svg",
