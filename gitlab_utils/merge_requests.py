@@ -39,7 +39,9 @@ def get_user_mrs(client, user_id, since=None, until=None):
                 "/merge_requests", params=params, per_page=50, max_pages=10
             )
             for item in items:
-                item_id = item["id"]
+                item_id = item.get("id")
+                if item_id is None:
+                    continue
 
                 # Track assigned IDs separately (before dedup check)
                 if role_label == "Assigned":
@@ -67,7 +69,6 @@ def get_user_mrs(client, user_id, since=None, until=None):
                         stats["closed"] += 1
                     elif state == "opened":
                         stats["opened"] += 1
-                        stats["pending"] += 1
 
         except Exception:
             pass
@@ -122,7 +123,9 @@ def get_user_mrs_project(client, project_id, user_id, since=None, until=None):
                 max_pages=10,
             )
             for item in items:
-                item_id = item["id"]
+                item_id = item.get("id")
+                if item_id is None:
+                    continue
 
                 if role_label == "Assigned":
                     assigned_ids.add(item_id)
@@ -148,7 +151,6 @@ def get_user_mrs_project(client, project_id, user_id, since=None, until=None):
                         stats["closed"] += 1
                     elif state == "opened":
                         stats["opened"] += 1
-                        stats["pending"] += 1
 
         except Exception:
             pass
