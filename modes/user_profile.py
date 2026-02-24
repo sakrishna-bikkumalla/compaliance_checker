@@ -1,6 +1,8 @@
-import streamlit as st
 import pandas as pd
-from gitlab_utils import users, projects, commits, groups, merge_requests, issues
+import streamlit as st
+
+from gitlab_utils import commits, groups, issues, merge_requests, projects
+
 
 def render_user_profile(client, simple_user_info):
     """
@@ -36,8 +38,8 @@ def render_user_profile(client, simple_user_info):
 
         verified_contributed = []
         for p in proj_data["contributed"]:
-             if commit_counts.get(p['id'], 0) > 0:
-                 verified_contributed.append(p)
+            if commit_counts.get(p["id"], 0) > 0:
+                verified_contributed.append(p)
 
         personal_projects = proj_data["personal"]
 
@@ -65,7 +67,7 @@ def render_user_profile(client, simple_user_info):
     with p_col2:
         st.metric("Contributed Projects", len(verified_contributed))
         if verified_contributed:
-             with st.expander("View Contributed Projects"):
+            with st.expander("View Contributed Projects"):
                 for p in verified_contributed:
                     st.write(f"- [{p['name_with_namespace']}]({p['web_url']})")
 

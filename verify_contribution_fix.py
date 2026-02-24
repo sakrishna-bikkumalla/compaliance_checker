@@ -1,5 +1,6 @@
 import sys
 
+
 def test_event_discovery_implemented():
     projects_file = "gitlab_utils/projects.py"
     with open(projects_file, "r") as f:
@@ -18,6 +19,7 @@ def test_event_discovery_implemented():
         return False
 
     return True
+
 
 if __name__ == "__main__":
     if test_event_discovery_implemented():

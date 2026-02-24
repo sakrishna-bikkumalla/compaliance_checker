@@ -1,7 +1,8 @@
-import streamlit as st
-import requests
 import gitlab
+import requests
+import streamlit as st
 from gitlab import Gitlab
+
 
 def safe_api_call(func, *args, **kwargs):
     """
@@ -12,14 +13,16 @@ def safe_api_call(func, *args, **kwargs):
     for attempt in range(max_retries):
         try:
             return func(*args, **kwargs)
-        except (gitlab.exceptions.GitlabAuthenticationError,
-                gitlab.exceptions.GitlabConnectionError,
-                requests.exceptions.ConnectionError,
-                requests.exceptions.RequestException,
-                TimeoutError,
-                ConnectionResetError) as e:
+        except (
+            gitlab.exceptions.GitlabAuthenticationError,
+            gitlab.exceptions.GitlabConnectionError,
+            requests.exceptions.ConnectionError,
+            requests.exceptions.RequestException,
+            TimeoutError,
+            ConnectionResetError,
+        ) as e:
             if attempt < max_retries - 1:
-                print(f"Safe API Call Attempt {attempt+1} failed: {e}. Retrying...")
+                print(f"Safe API Call Attempt {attempt + 1} failed: {e}. Retrying...")
                 continue
             print(f"Safe API Call failed after {max_retries} attempts: {e}")
             return []
@@ -28,6 +31,7 @@ def safe_api_call(func, *args, **kwargs):
             return []
     return []
 
+
 class GitLabClient:
     def __init__(self, base_url, private_token):
         self.base_url = base_url.rstrip("/")
@@ -35,12 +39,7 @@ class GitLabClient:
         self.headers = {"PRIVATE-TOKEN": private_token}
         # Initialize official python-gitlab client for access to full API
         try:
-            self.client = Gitlab(
-                url=self.base_url,
-                private_token=private_token,
-                timeout=10,
-                ssl_verify=False
-            )
+            self.client = Gitlab(url=self.base_url, private_token=private_token, timeout=10, ssl_verify=False)
             # auth() is cheap and verifies credentials
             self.client.auth()
         except Exception as e:
@@ -50,13 +49,14 @@ class GitLabClient:
 
     def _request(self, method, endpoint, params=None):
         url = f"{self.api_base}{endpoint}"
+
         def make_request():
             response = requests.request(
                 method,
                 url,
                 headers=self.headers,
                 params=params,
-                timeout=30, # Increased to 30s to handle slow project/commit fetches
+                timeout=30,  # Increased to 30s to handle slow project/commit fetches
             )
             response.raise_for_status()
             if response.status_code == 204:

@@ -42,9 +42,7 @@ def process_single_user(client, username, since=None, until=None):
 
         # Refine Contributed — only projects with verified commits
         result["data"]["projects"]["contributed"] = [
-            p
-            for p in projs["contributed"]
-            if p["id"] in commit_counts and commit_counts[p["id"]] > 0
+            p for p in projs["contributed"] if p["id"] in commit_counts and commit_counts[p["id"]] > 0
         ]
 
         # 4. Groups
@@ -82,10 +80,7 @@ def process_batch_users(client, usernames, since=None, until=None):
     clean_usernames = [u.strip() for u in usernames if u.strip()]
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-        future_to_user = {
-            executor.submit(process_single_user, client, u, since, until): u
-            for u in clean_usernames
-        }
+        future_to_user = {executor.submit(process_single_user, client, u, since, until): u for u in clean_usernames}
 
         for future in concurrent.futures.as_completed(future_to_user):
             try:
@@ -128,16 +123,12 @@ def process_single_user_project_filtered(client, username, project_id, since=Non
         result["data"]["commit_stats"] = commit_stats
 
         # 3. MRs (Project Filtered)
-        user_mrs, mr_stats = merge_requests.get_user_mrs_project(
-            client, project_id, user_id, since=since, until=until
-        )
+        user_mrs, mr_stats = merge_requests.get_user_mrs_project(client, project_id, user_id, since=since, until=until)
         result["data"]["mrs"] = user_mrs
         result["data"]["mr_stats"] = mr_stats
 
         # 4. Issues (Project Filtered)
-        user_issues, issue_stats = issues.get_user_issues_project(
-            client, project_id, user_id, since=since, until=until
-        )
+        user_issues, issue_stats = issues.get_user_issues_project(client, project_id, user_id, since=since, until=until)
         result["data"]["issues"] = user_issues
         result["data"]["issue_stats"] = issue_stats
 
@@ -160,9 +151,7 @@ def process_batch_users_project_filtered(client, usernames, project_id, since=No
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         future_to_user = {
-            executor.submit(
-                process_single_user_project_filtered, client, u, project_id, since, until
-            ): u
+            executor.submit(process_single_user_project_filtered, client, u, project_id, since, until): u
             for u in clean_usernames
         }
 

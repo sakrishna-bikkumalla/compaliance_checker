@@ -66,8 +66,7 @@ def process_commits(commits):
             {
                 "project_type": commit.get("project_scope", "-"),
                 "project": commit.get("project_name", "-"),
-                "message": commit.get("title")
-                or commit.get("message", "").split("\n")[0],
+                "message": commit.get("title") or commit.get("message", "").split("\n")[0],
                 "date": date_str,
                 "time": time_str,
                 "slot": slot,
