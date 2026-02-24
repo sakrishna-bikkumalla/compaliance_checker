@@ -139,6 +139,26 @@ def get_team_by_name(team_name: str) -> dict | None:
     return None
 
 
+def _get_combined_teams() -> tuple[list[dict], list[dict], list[dict]]:
+    """Return (backend_teams, custom_teams, combined_unique_teams)."""
+    backend_teams = get_all_teams()
+    custom_teams: list[dict] = copy.deepcopy(st.session_state.get("teams", []))
+
+    combined: list[dict] = []
+    seen_team_names: set[str] = set()
+    for team in backend_teams + custom_teams:
+        team_name = (team.get("team_name") or "").strip()
+        if not team_name:
+            continue
+        key = team_name.lower()
+        if key in seen_team_names:
+            continue
+        seen_team_names.add(key)
+        combined.append(team)
+
+    return backend_teams, custom_teams, combined
+
+
 # ---------------------------------------------------------------------------
 # Session State Bootstrap
 # ---------------------------------------------------------------------------
@@ -551,16 +571,27 @@ def _render_json_upload() -> None:
 
 def _render_create_team_form() -> None:
     """Expandable form for creating a brand-new team."""
-    # Don't show either form while an edit is active
-    if st.session_state.get("edit_team_index") is not None:
-        return
+    backend_teams, custom_teams, all_teams = _get_combined_teams()
+    is_editing = st.session_state.get("edit_team_index") is not None
 
-    # Two-button header: Create | Upload JSON
-    btn_col1, btn_col2 = st.columns([1, 1])
+    team_options = ["All Teams"] + [team["team_name"] for team in all_teams]
+    current_selection = st.session_state.get("_lb_selected_team", "All Teams")
+    if current_selection not in team_options:
+        st.session_state["_lb_selected_team"] = "All Teams"
 
+    # Top controls in one row: Select Team | Create | Upload
+    sel_col, btn_col1, btn_col2 = st.columns([2, 1, 1])
+    with sel_col:
+        st.selectbox(
+            "Select Team",
+            options=team_options,
+            key="_lb_selected_team",
+            label_visibility="collapsed",
+            help="Choose a specific team or keep All Teams to analyze everyone.",
+        )
     with btn_col1:
         create_label = "✖ Cancel" if st.session_state["_lb_show_create_form"] else "➕ Create New Team"
-        if st.button(create_label, key="_lb_toggle_form", use_container_width=True):
+        if st.button(create_label, key="_lb_toggle_form", use_container_width=True, disabled=is_editing):
             st.session_state["_lb_show_create_form"] = not st.session_state["_lb_show_create_form"]
             st.session_state["_lb_show_upload_form"] = False  # close the other panel
             st.session_state["_lb_draft_members"] = []
@@ -568,11 +599,20 @@ def _render_create_team_form() -> None:
 
     with btn_col2:
         upload_label = "✖ Cancel Upload" if st.session_state["_lb_show_upload_form"] else "📂 Add All Teams Using JSON"
-        if st.button(upload_label, key="_lb_toggle_upload", use_container_width=True):
+        if st.button(upload_label, key="_lb_toggle_upload", use_container_width=True, disabled=is_editing):
             st.session_state["_lb_show_upload_form"] = not st.session_state["_lb_show_upload_form"]
             st.session_state["_lb_show_create_form"] = False  # close the other panel
             st.session_state["_lb_draft_members"] = []
             st.rerun()
+
+    st.caption(
+        "Configured teams: "
+        f"Backend **{len(backend_teams)}** + Custom **{len(custom_teams)}** | "
+        f"Available in dropdown: **{len(all_teams)}**"
+    )
+
+    if is_editing:
+        return
 
     # Show whichever panel is active
     if st.session_state["_lb_show_upload_form"]:
@@ -1577,49 +1617,28 @@ def render_team_leaderboard(client) -> None:
     _render_teams_overview()
     st.divider()
 
-    # ── Section 2: Team Selection ─────────────────────────────────────────
-    backend_teams = get_all_teams()
-    custom_teams: list[dict] = copy.deepcopy(st.session_state.get("teams", []))
-
-    all_teams: list[dict] = []
-    seen_team_names: set[str] = set()
-    for team in backend_teams + custom_teams:
-        team_name = (team.get("team_name") or "").strip()
-        if not team_name:
-            continue
-        key = team_name.lower()
-        if key in seen_team_names:
-            continue
-        seen_team_names.add(key)
-        all_teams.append(team)
-
+    # ── Section 2: Team Selection (from top controls) ─────────────────────
+    backend_teams, custom_teams, all_teams = _get_combined_teams()
     if not all_teams:
         st.error("No teams are configured.")
         return
 
-    team_options = ["All Teams"] + [team["team_name"] for team in all_teams]
-    selected_team_name = st.selectbox(
-        "Select Team",
-        options=team_options,
-        key="_lb_selected_team",
-        help="Choose a specific team or keep All Teams to analyze everyone.",
-    )
+    selected_team_name = st.session_state.get("_lb_selected_team", "All Teams")
 
     if selected_team_name == "All Teams":
         teams = all_teams
     else:
-        selected_team = get_team_by_name(selected_team_name)
+        selected_team = next(
+            (team for team in all_teams if team.get("team_name", "").strip().lower() == selected_team_name.lower()),
+            None,
+        )
         teams = [selected_team] if selected_team else []
 
     if not teams:
         st.error("Selected team is not available in backend configuration.")
         return
 
-    st.caption(
-        "Configured teams: "
-        f"Backend **{len(backend_teams)}** + Custom **{len(custom_teams)}** | "
-        f"Selected for run: **{len(teams)}**"
-    )
+    st.caption(f"Selected for run: **{len(teams)}**")
     st.divider()
 
     # ── Section 3: Analysis Filters ───────────────────────────────────────
