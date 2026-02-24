@@ -1284,6 +1284,7 @@ def _load_rank_badge_svg(rank: int) -> str:
 
     repo_root = Path(__file__).resolve().parent.parent
     candidate_dirs = [
+        repo_root / "badges",
         repo_root / "assets" / "badges",
         Path.home() / "Downloads" / "final badges",
         Path.home() / "Downloads" / "badges svg",
@@ -1524,18 +1525,13 @@ def render_team_leaderboard(client) -> None:
         _to_str = until_iso[:10]
         _active_filters.append(f"• 📅 Date: **{_from_str}** → **{_to_str}**")
 
-    # Project filter — report any teams that have a project scope set
-    _scoped_projects = sorted(
-        {t["project_name"].strip() for t in teams if t.get("project_name", "").strip()}
-    )
-    if _scoped_projects:
-        _proj_label = ", ".join(f"`{p}`" for p in _scoped_projects)
-        _active_filters.append(f"• 🗂 Project scope: {_proj_label}")
+    # Project filter — use resolved project_id from _render_project_filter
+    if bool(project_id):
+        _proj_label = st.session_state.get("_lb_project_input", str(project_id))
+        _active_filters.append(f"• 🗂 Project: **{_proj_label}** (ID: `{project_id}`)")
 
     if _active_filters:
-        st.markdown(
-            "🔎 **Active Filters:**\n\n" + "\n\n".join(_active_filters),
-        )
+        st.markdown("🔎 **Active Filters:**\n\n" + "\n\n".join(_active_filters))
     else:
         st.info("🔎 **Active Filters:** None (Showing full history across all projects)")
     # ── Active filter badges ──────────────────────────────────────────────
