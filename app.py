@@ -56,10 +56,7 @@ def main():
     st.sidebar.markdown("---")
     st.sidebar.markdown("### About")
     st.sidebar.info(
-        "Refactored Tool:\n"
-        "- Project Compliance\n"
-        "- User Analytics (Single & Batch)\n"
-        "- Groups, MRs, Issues, Commits"
+        "Refactored Tool:\n- Project Compliance\n- User Analytics (Single & Batch)\n- Groups, MRs, Issues, Commits"
     )
 
     if not gitlab_token:

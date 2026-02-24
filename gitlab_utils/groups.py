@@ -12,25 +12,20 @@ def get_user_groups(client, user_id):
         # params: membership=true -> limit to groups user is explicitly a member of
         # min_access_level=10 (Guest) ensures they have some access.
         groups = client._get_paginated(
-            "/groups",
-            params={"membership": "true", "min_access_level": 10},
-            per_page=50,
-            max_pages=10
+            "/groups", params={"membership": "true", "min_access_level": 10}, per_page=50, max_pages=10
         )
 
         # Deduplication check just in case API returns duplicates
         seen_ids = set()
 
         for g in groups:
-            if g['id'] in seen_ids:
+            if g["id"] in seen_ids:
                 continue
-            seen_ids.add(g['id'])
+            seen_ids.add(g["id"])
 
-            groups_list.append({
-                "name": g.get("name"),
-                "full_path": g.get("full_path"),
-                "visibility": g.get("visibility")
-            })
+            groups_list.append(
+                {"name": g.get("name"), "full_path": g.get("full_path"), "visibility": g.get("visibility")}
+            )
 
     except Exception as e:
         print(f"Error fetching groups: {e}")

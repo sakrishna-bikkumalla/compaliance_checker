@@ -66,9 +66,7 @@ elements.append(Paragraph("GitLab Compliance Checker", title_style))
 elements.append(Spacer(1, 0.2 * inch))
 elements.append(Paragraph("Technical Documentation Report", styles["Heading2"]))
 elements.append(Spacer(1, 0.1 * inch))
-elements.append(
-    Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y at %H:%M')}", body_style)
-)
+elements.append(Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y at %H:%M')}", body_style))
 elements.append(Spacer(1, 0.5 * inch))
 
 # Executive Summary

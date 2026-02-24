@@ -35,9 +35,7 @@ def get_user_mrs(client, user_id, since=None, until=None):
     def fetch_and_add(base_params: dict, role_label: str) -> None:
         try:
             params = {**base_params, **date_params}
-            items = client._get_paginated(
-                "/merge_requests", params=params, per_page=50, max_pages=10
-            )
+            items = client._get_paginated("/merge_requests", params=params, per_page=50, max_pages=10)
             for item in items:
                 item_id = item["id"]
 

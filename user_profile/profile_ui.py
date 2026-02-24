@@ -8,9 +8,7 @@ from user_profile.profile_utils import (
 
 
 def render_user_profile(client, user_info):
-    st.subheader(
-        f"User: {user_info['name']} (@{user_info['username']}, ID: {user_info['id']})"
-    )
+    st.subheader(f"User: {user_info['name']} (@{user_info['username']}, ID: {user_info['id']})")
     if user_info.get("avatar_url"):
         st.image(user_info["avatar_url"], width=80)
     st.markdown(f"[View GitLab Profile]({user_info.get('web_url', '')})")
@@ -19,7 +17,7 @@ def render_user_profile(client, user_info):
 
     try:
         groups = client.users.get_user_groups(user_id)
-    except Exception as e:
+    except Exception:
         # Keep UI clean even if groups API is unavailable, but log for debug
         # st.warning(f"Debug: Could not load groups: {e}")
         groups = []
@@ -49,8 +47,24 @@ def render_user_profile(client, user_info):
         mrs_raw = []
 
     # Simple processing for lists
-    issue_rows = [{"title": i.get("title"), "state": i.get("state"), "created_at": i.get("created_at"), "web_url": i.get("web_url")} for i in issues_raw]
-    mr_rows = [{"title": m.get("title"), "state": m.get("state"), "created_at": m.get("created_at"), "web_url": m.get("web_url")} for m in mrs_raw]
+    issue_rows = [
+        {
+            "title": i.get("title"),
+            "state": i.get("state"),
+            "created_at": i.get("created_at"),
+            "web_url": i.get("web_url"),
+        }
+        for i in issues_raw
+    ]
+    mr_rows = [
+        {
+            "title": m.get("title"),
+            "state": m.get("state"),
+            "created_at": m.get("created_at"),
+            "web_url": m.get("web_url"),
+        }
+        for m in mrs_raw
+    ]
 
     st.subheader("📊 Account Statistics")
 
@@ -62,26 +76,10 @@ def render_user_profile(client, user_info):
     mr_count = len(mr_rows)
     commit_count = len(commit_rows)
 
-    personal_commit_count = len(
-        [c for c in commit_rows if (c.get("project_type") or "").lower() == "personal"]
-    )
-    contributed_commit_count = len(
-        [c for c in commit_rows if (c.get("project_type") or "").lower() == "contributed"]
-    )
-    morning_commits = len(
-        [
-            c
-            for c in commit_rows
-            if (c.get("slot") or "").lower() == "morning"
-        ]
-    )
-    afternoon_commits = len(
-        [
-            c
-            for c in commit_rows
-            if (c.get("slot") or "").lower() == "afternoon"
-        ]
-    )
+    personal_commit_count = len([c for c in commit_rows if (c.get("project_type") or "").lower() == "personal"])
+    contributed_commit_count = len([c for c in commit_rows if (c.get("project_type") or "").lower() == "contributed"])
+    morning_commits = len([c for c in commit_rows if (c.get("slot") or "").lower() == "morning"])
+    afternoon_commits = len([c for c in commit_rows if (c.get("slot") or "").lower() == "afternoon"])
 
     cards = [
         ("Projects", proj_count),
@@ -175,9 +173,7 @@ def render_user_profile(client, user_info):
                     "name": p.get("name"),
                     "name_with_namespace": p.get("name_with_namespace"),
                     "web_url": p.get("web_url"),
-                    "project_type": "Personal"
-                    if p in personal_projects
-                    else "Contributed",
+                    "project_type": "Personal" if p in personal_projects else "Contributed",
                 }
                 for p in projects
             ],
