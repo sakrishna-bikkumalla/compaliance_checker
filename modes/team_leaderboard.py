@@ -743,6 +743,406 @@ def _render_teams_overview() -> None:
 
 
 # ---------------------------------------------------------------------------
+# UI: Theme CSS Injection
+# ---------------------------------------------------------------------------
+
+
+def _inject_dark_css() -> None:
+    """Inject scoped dark-theme CSS for the Team Leaderboard page."""
+    bg = "#0f1117"
+    card_bg = "#1a1d2e"
+    card_border = "#2d3154"
+    accent = "#4f8ef7"
+    text = "#e8eaf0"
+    sub_text = "#8892a4"
+    metric_bg = "#242840"
+    metric_val = "#4f8ef7"
+    badge_date = "#1b3a5c"
+    badge_proj = "#1b3845"
+    badge_date_text = "#60aff0"
+    badge_proj_text = "#34d399"
+    header_bg = "linear-gradient(135deg, #1a1d2e 0%, #242840 100%)"
+
+    css = f"""
+    <style>
+    /* ── Page background ── */
+    section[data-testid="stMain"] {{
+        background-color: {bg};
+    }}
+
+    /* ── LB header card ── */
+    .lb-header {{
+        background: {header_bg};
+        border: 1px solid {card_border};
+        border-radius: 14px;
+        padding: 24px 28px 18px;
+        margin-bottom: 24px;
+    }}
+    .lb-header h1 {{
+        color: {text};
+        font-size: 2rem;
+        font-weight: 800;
+        margin: 0 0 4px;
+        letter-spacing: -0.5px;
+    }}
+    .lb-header p {{
+        color: {sub_text};
+        font-size: 0.95rem;
+        margin: 0;
+    }}
+    .lb-header .formula {{
+        display: inline-block;
+        margin-top: 10px;
+        background: {metric_bg};
+        color: {accent};
+        font-size: 0.82rem;
+        font-family: monospace;
+        padding: 4px 10px;
+        border-radius: 6px;
+        border: 1px solid {card_border};
+    }}
+
+    /* ── Filter card ── */
+    .lb-filter-card {{
+        background: {card_bg};
+        border: 1px solid {card_border};
+        border-left: 4px solid {accent};
+        border-radius: 12px;
+        padding: 20px 22px 16px;
+        margin-bottom: 20px;
+    }}
+    .lb-filter-title {{
+        color: {accent};
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin-bottom: 10px;
+    }}
+
+    /* ── Run button glow ── */
+    div[data-testid="stButton"] > button[kind="primary"] {{
+        background: {accent} !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.03em;
+        transition: box-shadow 0.2s ease, transform 0.15s ease;
+        box-shadow: 0 2px 12px {accent}44;
+    }}
+    div[data-testid="stButton"] > button[kind="primary"]:hover {{
+        box-shadow: 0 4px 22px {accent}88 !important;
+        transform: translateY(-1px);
+    }}
+
+    /* ── Active filter badges ── */
+    .lb-badges {{
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 12px 0 20px;
+    }}
+    .lb-badge-date {{
+        background: {badge_date};
+        color: {badge_date_text};
+        border-radius: 20px;
+        padding: 5px 14px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        border: 1px solid {badge_date_text}33;
+    }}
+    .lb-badge-project {{
+        background: {badge_proj};
+        color: {badge_proj_text};
+        border-radius: 20px;
+        padding: 5px 14px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        border: 1px solid {badge_proj_text}33;
+    }}
+    .lb-badge-none {{
+        background: transparent;
+        color: {sub_text};
+        border-radius: 20px;
+        padding: 5px 14px;
+        font-size: 0.82rem;
+        border: 1px dashed {card_border};
+    }}
+
+    /* ── Section label ── */
+    .lb-section-label {{
+        color: {sub_text};
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+    }}
+
+    /* ── Team card ── */
+    .lb-team-card {{
+        background: {card_bg};
+        border: 1px solid {card_border};
+        border-radius: 14px;
+        padding: 22px 24px 18px;
+        margin-bottom: 28px;
+        box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+    }}
+    .lb-team-name {{
+        color: {text};
+        font-size: 1.25rem;
+        font-weight: 800;
+        margin: 0 0 2px;
+    }}
+    .lb-team-project {{
+        color: {sub_text};
+        font-size: 0.82rem;
+        margin-bottom: 16px;
+    }}
+
+    /* ── Metric tiles ── */
+    .lb-metrics {{
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 12px;
+        margin-bottom: 18px;
+    }}
+    .lb-metric-tile {{
+        background: {metric_bg};
+        border: 1px solid {card_border};
+        border-radius: 10px;
+        padding: 12px 10px;
+        text-align: center;
+    }}
+    .lb-metric-label {{
+        color: {sub_text};
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        margin-bottom: 6px;
+    }}
+    .lb-metric-value {{
+        color: {metric_val};
+        font-size: 1.5rem;
+        font-weight: 800;
+        line-height: 1;
+    }}
+
+    /* ── Dataframe ── */
+    div[data-testid="stDataFrame"] {{
+        border-radius: 10px;
+        overflow: hidden;
+        border: 1px solid {card_border};
+    }}
+    </style>
+    """
+    st.markdown(css, unsafe_allow_html=True)
+
+    css = f"""
+    <style>
+    /* ── Page background ── */
+    section[data-testid="stMain"] {{
+        background-color: {bg};
+    }}
+
+    /* ── LB header card ── */
+    .lb-header {{
+        background: {header_bg};
+        border: 1px solid {card_border};
+        border-radius: 14px;
+        padding: 24px 28px 18px;
+        margin-bottom: 24px;
+    }}
+    .lb-header h1 {{
+        color: {text};
+        font-size: 2rem;
+        font-weight: 800;
+        margin: 0 0 4px;
+        letter-spacing: -0.5px;
+    }}
+    .lb-header p {{
+        color: {sub_text};
+        font-size: 0.95rem;
+        margin: 0;
+    }}
+    .lb-header .formula {{
+        display: inline-block;
+        margin-top: 10px;
+        background: {metric_bg};
+        color: {accent};
+        font-size: 0.82rem;
+        font-family: monospace;
+        padding: 4px 10px;
+        border-radius: 6px;
+        border: 1px solid {card_border};
+    }}
+
+    /* ── Filter card ── */
+    .lb-filter-card {{
+        background: {card_bg};
+        border: 1px solid {card_border};
+        border-left: 4px solid {accent};
+        border-radius: 12px;
+        padding: 20px 22px 16px;
+        margin-bottom: 20px;
+    }}
+    .lb-filter-title {{
+        color: {accent};
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin-bottom: 10px;
+    }}
+
+    /* ── Run button hover glow ── */
+    div[data-testid="stButton"] > button[kind="primary"] {{
+        background: {accent} !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.03em;
+        transition: box-shadow 0.2s ease, transform 0.15s ease;
+        box-shadow: 0 2px 12px {accent}44;
+    }}
+    div[data-testid="stButton"] > button[kind="primary"]:hover {{
+        box-shadow: 0 4px 22px {accent}88 !important;
+        transform: translateY(-1px);
+    }}
+
+    /* ── Active filter badges ── */
+    .lb-badges {{
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 12px 0 20px;
+    }}
+    .lb-badge-date {{
+        background: {badge_date};
+        color: {badge_date_text};
+        border-radius: 20px;
+        padding: 5px 14px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        border: 1px solid {badge_date_text}33;
+    }}
+    .lb-badge-project {{
+        background: {badge_proj};
+        color: {badge_proj_text};
+        border-radius: 20px;
+        padding: 5px 14px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        border: 1px solid {badge_proj_text}33;
+    }}
+    .lb-badge-none {{
+        background: transparent;
+        color: {sub_text};
+        border-radius: 20px;
+        padding: 5px 14px;
+        font-size: 0.82rem;
+        border: 1px dashed {card_border};
+    }}
+
+    /* ── Section label above team card ── */
+    .lb-section-label {{
+        color: {sub_text};
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+    }}
+
+    /* ── Team card ── */
+    .lb-team-card {{
+        background: {card_bg};
+        border: 1px solid {card_border};
+        border-radius: 14px;
+        padding: 22px 24px 18px;
+        margin-bottom: 28px;
+        box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+    }}
+    .lb-team-name {{
+        color: {text};
+        font-size: 1.25rem;
+        font-weight: 800;
+        margin: 0 0 2px;
+    }}
+    .lb-team-project {{
+        color: {sub_text};
+        font-size: 0.82rem;
+        margin-bottom: 16px;
+    }}
+
+    /* ── Metric tiles inside team card ── */
+    .lb-metrics {{
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 12px;
+        margin-bottom: 18px;
+    }}
+    .lb-metric-tile {{
+        background: {metric_bg};
+        border: 1px solid {card_border};
+        border-radius: 10px;
+        padding: 12px 10px;
+        text-align: center;
+    }}
+    .lb-metric-label {{
+        color: {sub_text};
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        margin-bottom: 6px;
+    }}
+    .lb-metric-value {{
+        color: {metric_val};
+        font-size: 1.5rem;
+        font-weight: 800;
+        line-height: 1;
+    }}
+
+    /* ── Dataframe table tweaks ── */
+    div[data-testid="stDataFrame"] {{
+        border-radius: 10px;
+        overflow: hidden;
+        border: 1px solid {card_border};
+    }}
+    </style>
+    """
+    st.markdown(css, unsafe_allow_html=True)
+
+
+def _render_active_filters_badges(since_iso, until_iso, project_id) -> None:
+    """Render active filters as modern pill badges."""
+    badges_html = '<div class="lb-badges">'
+    has_filter = False
+
+    if since_iso and until_iso:
+        has_filter = True
+        from_str = since_iso[:10]
+        to_str = until_iso[:10]
+        badges_html += f'<span class="lb-badge-date">📅 Date: {from_str} → {to_str}</span>'
+
+    if bool(project_id):
+        has_filter = True
+        proj_label = st.session_state.get("_lb_project_input", str(project_id))
+        # Truncate long URLs for display
+        if len(proj_label) > 48:
+            proj_label = "..." + proj_label[-45:]
+        badges_html += f'<span class="lb-badge-project">🗂 Project: {proj_label}</span>'
+
+    if not has_filter:
+        badges_html += '<span class="lb-badge-none">🔍 No filters — full history</span>'
+
+    badges_html += "</div>"
+    st.markdown(badges_html, unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------------------
 # UI: Per-Team Result Section
 # ---------------------------------------------------------------------------
 
@@ -750,17 +1150,38 @@ def _render_teams_overview() -> None:
 def _render_team_result(
     team_name: str, project_name: str, member_rows: list[dict], totals: dict
 ) -> None:
-    """Render analytics for one team: metrics, member table, group breakdown."""
-    st.subheader(f"🏅 {team_name}")
-    if project_name:
-        st.caption(f"Project: {project_name}")
+    """Render analytics for one team as a modern card with metrics and member table."""
+    proj_line = f'<div class="lb-team-project">📂 {project_name}</div>' if project_name else ""
 
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Team Score", totals["Team Score"])
-    c2.metric("Total Commits", totals["Total Commits"])
-    c3.metric("MR Merged", totals["MR Merged"])
-    c4.metric("Issues Closed", totals["Issues Closed"])
-    c5.metric("Members", len(member_rows))
+    metrics_html = f"""
+    <div class="lb-team-card">
+        <div class="lb-team-name">🏅 {team_name}</div>
+        {proj_line}
+        <div class="lb-metrics">
+            <div class="lb-metric-tile">
+                <div class="lb-metric-label">Team Score</div>
+                <div class="lb-metric-value">{totals["Team Score"]}</div>
+            </div>
+            <div class="lb-metric-tile">
+                <div class="lb-metric-label">Commits</div>
+                <div class="lb-metric-value">{totals["Total Commits"]}</div>
+            </div>
+            <div class="lb-metric-tile">
+                <div class="lb-metric-label">MR Merged</div>
+                <div class="lb-metric-value">{totals["MR Merged"]}</div>
+            </div>
+            <div class="lb-metric-tile">
+                <div class="lb-metric-label">Issues Closed</div>
+                <div class="lb-metric-value">{totals["Issues Closed"]}</div>
+            </div>
+            <div class="lb-metric-tile">
+                <div class="lb-metric-label">Members</div>
+                <div class="lb-metric-value">{len(member_rows)}</div>
+            </div>
+        </div>
+    </div>
+    """
+    st.markdown(metrics_html, unsafe_allow_html=True)
 
     display_cols = [
         "Username",
@@ -792,8 +1213,6 @@ def _render_team_result(
         with st.expander("👥 Group Breakdown"):
             st.dataframe(pd.DataFrame(group_rows), use_container_width=True, hide_index=True)
 
-    st.divider()
-
 
 # ---------------------------------------------------------------------------
 # UI: Overall Leaderboard
@@ -802,7 +1221,11 @@ def _render_team_result(
 
 def _render_overall_leaderboard(team_data: dict) -> None:
     """Ranked leaderboard table + bar chart."""
-    st.subheader("🏆 Overall Team Leaderboard")
+    st.markdown(
+        '<div class="lb-section-label">📊 Overall Leaderboard</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("### 🏆 Team Rankings")
 
     lb_rows = [
         {
@@ -822,7 +1245,7 @@ def _render_overall_leaderboard(team_data: dict) -> None:
     st.dataframe(df_lb, use_container_width=True, hide_index=True)
     st.divider()
 
-    st.subheader("📊 Team Score Comparison")
+    st.markdown("### 📊 Score Comparison")
     if not df_lb.empty:
         st.bar_chart(df_lb.set_index("Team")[["Team Score"]])
 
@@ -1032,10 +1455,18 @@ def render_team_leaderboard(client) -> None:
     """Main render function. Called from app.py with the GitLabClient instance."""
     _init_state()
 
-    st.subheader("🏆 Team Leaderboard")
+    _inject_dark_css()
+
+    # ── Page header card ─────────────────────────────────────────────────
     st.markdown(
-        "Create and manage teams, then run analytics to compare productivity scores.\n\n"
-        "**Score formula:** `Merged MRs × 5 + Commits × 1 + Issues Closed × 2.5`"
+        """
+        <div class="lb-header">
+            <h1>🏆 Team Leaderboard</h1>
+            <p>Compare team productivity across projects and time ranges.</p>
+            <span class="formula">Score = Merged MRs × 5 + Commits × 1 + Issues Closed × 2.5</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
     page = st.radio(
@@ -1072,12 +1503,16 @@ def render_team_leaderboard(client) -> None:
         st.info("💡 Finish editing the team above before running analysis.")
         return
 
-    # ── Date range filter ─────────────────────────────────────────────────
+    # ── Filter card ───────────────────────────────────────────────────────
+    st.markdown(
+        '<div class="lb-filter-card"><div class="lb-filter-title">🔎 Filters</div>',
+        unsafe_allow_html=True,
+    )
     since_iso, until_iso = _render_date_filter()
-
-    # ── Project filter ───────────────────────────────────────────────────
     project_id = _render_project_filter(client)
+    st.markdown("</div>", unsafe_allow_html=True)
 
+    # ── Run button ────────────────────────────────────────────────────────
     if st.button("▶️ Run Leaderboard Analysis", type="primary", key="_lb_run_btn"):
         st.session_state["_lb_triggered"] = True
 
@@ -1099,6 +1534,8 @@ def render_team_leaderboard(client) -> None:
         st.markdown("🔎 **Active Filters:**\n\n" + "\n\n".join(_active_filters))
     else:
         st.info("🔎 **Active Filters:** None (Showing full history across all projects)")
+    # ── Active filter badges ──────────────────────────────────────────────
+    _render_active_filters_badges(since_iso, until_iso, project_id)
 
     if not st.session_state.get("_lb_triggered"):
         st.info("Click **▶️ Run Leaderboard Analysis** to fetch data for all teams.")
@@ -1154,14 +1591,14 @@ def render_team_leaderboard(client) -> None:
     st.session_state["_lb_last_ranking_rows"] = _build_ranking_rows(team_data)
 
     # ── Render results ────────────────────────────────────────────────────
-    st.markdown("### 📊 Team Results")
+    st.markdown('<div class="lb-section-label">📊 Team Results</div>', unsafe_allow_html=True)
     for team_name, (meta, member_rows, totals) in team_data.items():
         _render_team_result(team_name, meta.get("project_name", ""), member_rows, totals)
 
     _render_overall_leaderboard(team_data)
 
     # ── Export ────────────────────────────────────────────────────────────
-    st.subheader("📥 Export Report")
+    st.markdown("### 📥 Export Report")
     now_ist = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5, minutes=30)))
     filename = f"team_leaderboard_{now_ist.strftime('%Y-%m-%d')}.xlsx"
     try:
