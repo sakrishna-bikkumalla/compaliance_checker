@@ -77,7 +77,7 @@ def process_batch_users(client, usernames, since=None, until=None):
     Backward compatible: omitting since/until matches original behaviour.
     """
     results = []
-    clean_usernames = [u.strip() for u in usernames if u.strip()]
+    clean_usernames = list(dict.fromkeys(u.strip().lower() for u in usernames if u.strip()))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         future_to_user = {executor.submit(process_single_user, client, u, since, until): u for u in clean_usernames}
@@ -147,7 +147,7 @@ def process_batch_users_project_filtered(client, usernames, project_id, since=No
     Parallel implementation of project-filtered processing.
     """
     results = []
-    clean_usernames = [u.strip() for u in usernames if u.strip()]
+    clean_usernames = list(dict.fromkeys(u.strip().lower() for u in usernames if u.strip()))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         future_to_user = {

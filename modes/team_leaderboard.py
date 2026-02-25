@@ -19,6 +19,7 @@ Session state keys (all prefixed _lb_ except "teams" and "edit_team_index"):
 import copy
 import datetime
 import io
+import statistics
 from html import escape
 from pathlib import Path
 
@@ -1405,6 +1406,105 @@ def _build_ranking_rows(team_data: dict) -> list[dict]:
     return ranked_rows
 
 
+def _build_individual_rows(team_data: dict) -> list[dict]:
+    """Flatten all members across teams into a ranked list with achievement badges."""
+    all_members: list[dict] = []
+    for team_name, (_, member_rows, _) in team_data.items():
+        for row in member_rows:
+            if row.get("Status") != "Success":
+                continue
+            all_members.append(
+                {
+                    "Username": row.get("Username", "unknown"),
+                    "Team Name": team_name,
+                    "Total Commits": row.get("Total Commits", 0),
+                    "MRs Merged": row.get("MR Merged", 0),
+                    "Issues Closed": row.get("Issues Closed", 0),
+                    "Score": row.get("Score", 0),
+                    "Badge": "",
+                }
+            )
+
+    all_members.sort(key=lambda x: x["Score"], reverse=True)
+
+    # Track badges per member (max 3 each)
+    MAX_BADGES = 3
+    member_badges: dict[str, list[str]] = {m["Username"]: [] for m in all_members}
+
+    def _can_badge(username: str) -> bool:
+        return len(member_badges[username]) < MAX_BADGES
+
+    def _add_badge(username: str, badge_name: str) -> None:
+        member_badges[username].append(badge_name)
+
+    # --- Team Player: highest scorer in each team ---
+    teams_seen: set[str] = set()
+    for m in all_members:
+        team = m["Team Name"]
+        if team not in teams_seen and m["Score"] > 0:
+            _add_badge(m["Username"], "team_player")
+            teams_seen.add(team)
+
+    # --- Global achievement badges (a person can hold multiple) ---
+    def _best_for(key: str, badge_name: str) -> None:
+        for m in sorted(all_members, key=lambda x: x[key], reverse=True):
+            if not _can_badge(m["Username"]):
+                continue
+            if badge_name in member_badges[m["Username"]]:
+                continue
+            if m[key] > 0:
+                _add_badge(m["Username"], badge_name)
+                return
+
+    def _best_consistency(badge_name: str) -> None:
+        candidates = [
+            m for m in all_members
+            if _can_badge(m["Username"])
+            and badge_name not in member_badges[m["Username"]]
+            and m["Total Commits"] > 0
+            and m["MRs Merged"] > 0
+            and m["Issues Closed"] > 0
+        ]
+        if not candidates:
+            return
+        best = min(
+            candidates,
+            key=lambda m: statistics.stdev(
+                [m["Total Commits"], m["MRs Merged"], m["Issues Closed"]]
+            )
+            / max(statistics.mean([m["Total Commits"], m["MRs Merged"], m["Issues Closed"]]), 1),
+        )
+        _add_badge(best["Username"], badge_name)
+
+    _best_for("Score", "sprint_star")
+    _best_for("Total Commits", "top_committer")
+    _best_for("MRs Merged", "merge_master")
+    # hackathon_hero: highest combined total
+    for m in sorted(
+        all_members,
+        key=lambda x: x["Total Commits"] + x["MRs Merged"] + x["Issues Closed"],
+        reverse=True,
+    ):
+        if (
+            _can_badge(m["Username"])
+            and "hackathon_hero" not in member_badges[m["Username"]]
+            and (m["Total Commits"] + m["MRs Merged"] + m["Issues Closed"]) > 0
+        ):
+            _add_badge(m["Username"], "hackathon_hero")
+            break
+    _best_consistency("consistency_champ")
+
+    # Write badges back to member dicts (list instead of single string)
+    for m in all_members:
+        m["Badges"] = member_badges[m["Username"]]
+
+    # Assign serial numbers
+    for idx, m in enumerate(all_members, start=1):
+        m["S.No"] = idx
+
+    return all_members
+
+
 def _load_rank_badge_svg(rank: int) -> str:
     """Load badge SVG markup for ranks 1-6 from assets; otherwise return empty."""
     if rank < 1 or rank > 6:
@@ -1444,6 +1544,20 @@ def _load_rank_badge_svg(rank: int) -> str:
             except Exception:
                 continue
 
+    return ""
+
+
+def _load_individual_badge_svg(badge_name: str) -> str:
+    """Load badge SVG markup by achievement name from assets/badges/."""
+    if not badge_name:
+        return ""
+    repo_root = Path(__file__).resolve().parent.parent
+    badge_path = repo_root / "assets" / "badges" / f"{badge_name}.svg"
+    if badge_path.exists():
+        try:
+            return badge_path.read_text(encoding="utf-8")
+        except Exception:
+            pass
     return ""
 
 
@@ -1514,19 +1628,35 @@ def _render_ranking_table_html(ranked_rows: list[dict]) -> None:
   color: #f4f7ff;
 }}
 .lb-badge-cell {{
-  width: 120px;
+  min-width: 140px;
 }}
 .lb-badge {{
-  width: 88px;
-  min-height: 48px;
+  width: 120px;
+  min-height: 64px;
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 6px;
 }}
 .lb-badge svg {{
-  width: 88px;
+  width: 120px;
   height: auto;
   display: block;
+}}
+.lb-badge-label {{
+  font-size: 11px;
+  font-weight: 600;
+  color: #a0b4d0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}}
+.lb-badges-row {{
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
 }}
 .lb-team {{
   min-width: 220px;
@@ -1559,6 +1689,74 @@ def _render_ranking_table_html(ranked_rows: list[dict]) -> None:
     st.markdown(html_table, unsafe_allow_html=True)
 
 
+def _render_individual_table_html(individual_rows: list[dict]) -> None:
+    """Render individual member ranking table with achievement badges."""
+    _badge_display_names = {
+        "team_player": "Team Player",
+        "sprint_star": "Sprint Star",
+        "top_committer": "Top Committer",
+        "merge_master": "Merge Master",
+        "hackathon_hero": "Hackathon Hero",
+        "consistency_champ": "Consistency Champ",
+    }
+
+    table_rows: list[str] = []
+    for row in individual_rows:
+        badges = row.get("Badges", [])
+        badge_parts: list[str] = []
+        for badge_name in badges:
+            svg = _load_individual_badge_svg(badge_name)
+            if svg:
+                label = _badge_display_names.get(
+                    badge_name, badge_name.replace("_", " ").title()
+                )
+                badge_parts.append(
+                    f'<div class="lb-badge">'
+                    f'{svg}'
+                    f'<span class="lb-badge-label">{escape(label)}</span>'
+                    f'</div>'
+                )
+        badge_html = (
+            f'<div class="lb-badges-row">{"".join(badge_parts)}</div>'
+            if badge_parts
+            else ""
+        )
+
+        table_rows.append(
+            "<tr>"
+            f'<td class="lb-rank">{int(row.get("S.No", 0))}</td>'
+            f'<td class="lb-badge-cell">{badge_html}</td>'
+            f'<td class="lb-team">{escape(str(row.get("Username", "")))}</td>'
+            f'<td class="lb-team">{escape(str(row.get("Team Name", "")))}</td>'
+            f'<td class="lb-num">{int(row.get("Total Commits", 0))}</td>'
+            f'<td class="lb-num">{int(row.get("MRs Merged", 0))}</td>'
+            f'<td class="lb-num">{int(row.get("Issues Closed", 0))}</td>'
+            "</tr>"
+        )
+
+    html_table = f"""
+<div class="lb-rank-wrap">
+  <table class="lb-rank-table">
+    <thead>
+      <tr>
+        <th>S.No</th>
+        <th>Badge</th>
+        <th>Username</th>
+        <th>Team Name</th>
+        <th>Total Commits</th>
+        <th>MRs Merged</th>
+        <th>Issues Closed</th>
+      </tr>
+    </thead>
+    <tbody>
+      {"".join(table_rows)}
+    </tbody>
+  </table>
+</div>
+"""
+    st.markdown(html_table, unsafe_allow_html=True)
+
+
 def _render_ranking_page() -> None:
     """Ranking-only view that reuses previously computed summary rows."""
     st.markdown("### 🏅 Leaderboard Ranking")
@@ -1570,6 +1768,21 @@ def _render_ranking_page() -> None:
         return
 
     _render_ranking_table_html(ranked_rows)
+
+    # ── Individual Member Rankings ─────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 👤 Individual Member Rankings")
+    st.caption(
+        "All members ranked by individual score. "
+        "Achievement badges: sprint_star, top_committer, merge_master, "
+        "team_player, hackathon_hero, consistency_champ."
+    )
+
+    individual_rows = st.session_state.get("_lb_last_individual_rows", [])
+    if individual_rows:
+        _render_individual_table_html(individual_rows)
+    else:
+        st.info("No individual data available yet.")
 
 
 # ---------------------------------------------------------------------------
@@ -1726,6 +1939,7 @@ def render_team_leaderboard(client) -> None:
 
     # Persist compact ranking summary for the separate ranking page.
     st.session_state["_lb_last_ranking_rows"] = _build_ranking_rows(team_data)
+    st.session_state["_lb_last_individual_rows"] = _build_individual_rows(team_data)
 
     # ── Render results ────────────────────────────────────────────────────
     st.markdown('<div class="lb-section-label">📊 Team Results</div>', unsafe_allow_html=True)

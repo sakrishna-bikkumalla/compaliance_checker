@@ -97,9 +97,11 @@ def get_user_commits(client, user, projects, since=None, until=None):
             )
 
             if commits_data:
-                valid_project_commits = 0
+                unique_project_commits = 0
                 for c in commits_data:
                     sha = c.get("id")
+                    if not sha or sha in seen_shas:
+                        continue
 
                     # Validation — match by name, email, or username
                     c_author_name = c.get("author_name")
@@ -118,12 +120,8 @@ def get_user_commits(client, user, projects, since=None, until=None):
                     if not is_match:
                         continue
 
-                    valid_project_commits += 1
-
-                    if sha in seen_shas:
-                        continue
-
                     seen_shas.add(sha)
+                    unique_project_commits += 1
                     stats["total"] += 1
 
                     # Parse commit timestamp — try committed_date first, fall back to created_at
@@ -147,7 +145,7 @@ def get_user_commits(client, user, projects, since=None, until=None):
                         }
                     )
 
-                project_commit_counts[pid] = valid_project_commits
+                project_commit_counts[pid] = unique_project_commits
 
         except Exception:
             pass
@@ -165,6 +163,7 @@ def get_user_commits_project(client, project_id, username, since=None, until=Non
       - stats: Dict {total, morning_commits, afternoon_commits}
     """
     commits_list = []
+    seen_shas: set = set()
     stats = {
         "total": 0,
         "morning_commits": 0,
@@ -190,6 +189,21 @@ def get_user_commits_project(client, project_id, username, since=None, until=Non
         )
 
         for c in commits_data:
+            sha = c.get("id")
+            if not sha or sha in seen_shas:
+                continue
+
+            # Validate author matches the requested username
+            c_author_name = c.get("author_name") or ""
+            c_author_email = c.get("author_email") or ""
+            uname_lower = username.lower()
+            if not (
+                uname_lower in c_author_name.lower()
+                or uname_lower in c_author_email.lower()
+            ):
+                continue
+
+            seen_shas.add(sha)
             stats["total"] += 1
 
             # Parse commit timestamp — try committed_date first, fall back to created_at

@@ -29,6 +29,8 @@ def get_user_issues(client, user_id, since=None, until=None):
             items = client._get_paginated("/issues", params=params, per_page=50, max_pages=10)
             for item in items:
                 item_id = item.get("id")
+                if item_id is None:
+                    continue
 
                 if role_label == "Assigned":
                     assigned_ids.add(item_id)
@@ -98,6 +100,8 @@ def get_user_issues_project(client, project_id, user_id, since=None, until=None)
             )
             for item in items:
                 item_id = item.get("id")
+                if item_id is None:
+                    continue
 
                 if role_label == "Assigned":
                     assigned_ids.add(item_id)
