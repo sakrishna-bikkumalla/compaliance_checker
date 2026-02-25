@@ -14,6 +14,9 @@ Session state keys (all prefixed _lb_ except "teams" and "edit_team_index"):
     "_lb_draft_members"       — member list being built before first Save
     "_lb_edit_draft"          — copy of team being edited (name, project, members)
     "_lb_triggered"           — bool, whether Run Analysis has been clicked
+    "_lb_has_run"             — bool, True after first successful batch run
+    "_lb_cached_results"      — dict team_data from last run, reused on page switch
+    "_lb_frozen_filters"      — filter snapshot frozen at run time (since/until/project_id/teams)
 """
 
 import copy
@@ -185,6 +188,10 @@ def _init_state() -> None:
         "_lb_selected_team": "All Teams",
         "_lb_page": "Workspace",
         "_lb_last_ranking_rows": [],
+        # Persistent run-trigger keys — batch only executes when button is pressed
+        "_lb_has_run": False,  # True after the first successful run
+        "_lb_cached_results": None,  # Cached team_data dict from last run
+        "_lb_frozen_filters": None,  # Filters snapshot frozen at run time
     }
     for key, default in defaults.items():
         if key not in st.session_state:
@@ -1864,83 +1871,121 @@ def render_team_leaderboard(client) -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
     # ── Run button ────────────────────────────────────────────────────────
-    if st.button("▶️ Run Leaderboard Analysis", type="primary", key="_lb_run_btn"):
-        st.session_state["_lb_triggered"] = True
+    run_button = st.button("▶️ Run Leaderboard Analysis", type="primary", key="_lb_run_btn")
 
-    # ── Active filters display (read-only, updates on every rerun) ────────
+    if run_button:
+        # Freeze the live filter values at the moment the button is pressed.
+        st.session_state["_lb_triggered"] = True
+        st.session_state["_lb_frozen_filters"] = {
+            "since": since_iso,
+            "until": until_iso,
+            "project_id": project_id,
+            "teams": st.session_state.get("teams"),
+        }
+
+    # ── Resolve which filter values and results to use for display ────────
+    # Always use frozen values from the last run (not live widget values)
+    # so that switching pages does not change what is shown.
+    if st.session_state["_lb_has_run"] and not run_button:
+        # Page-switch path: use cached data, do NOT re-fetch.
+        team_data = st.session_state["_lb_cached_results"]
+        frozen = st.session_state["_lb_frozen_filters"] or {}
+        _display_since = frozen.get("since")
+        _display_until = frozen.get("until")
+        _display_project_id = frozen.get("project_id")
+    else:
+        # First run or button re-pressed: live values apply.
+        _display_since = since_iso
+        _display_until = until_iso
+        _display_project_id = project_id
+        team_data = None  # will be populated below if button was pressed
+
+    # ── Active filters display (uses frozen values after first run) ───────
     _active_filters: list[str] = []
 
-    # Date filter — only show when both bounds are set
-    if since_iso and until_iso:
-        _from_str = since_iso[:10]
-        _to_str = until_iso[:10]
+    if _display_since and _display_until:
+        _from_str = _display_since[:10]
+        _to_str = _display_until[:10]
         _active_filters.append(f"• 📅 Date: **{_from_str}** → **{_to_str}**")
 
-    # Project filter — use resolved project_id from _render_project_filter
-    if bool(project_id):
-        _proj_label = st.session_state.get("_lb_project_input", str(project_id))
-        _active_filters.append(f"• 🗂 Project: **{_proj_label}** (ID: `{project_id}`)")
+    if bool(_display_project_id):
+        _proj_label = st.session_state.get("_lb_project_input", str(_display_project_id))
+        _active_filters.append(f"• 🗂 Project: **{_proj_label}** (ID: `{_display_project_id}`)")
 
     if _active_filters:
         st.markdown("🔎 **Active Filters:**\n\n" + "\n\n".join(_active_filters))
     else:
         st.info("🔎 **Active Filters:** None (Showing full history across all projects)")
     # ── Active filter badges ──────────────────────────────────────────────
-    _render_active_filters_badges(since_iso, until_iso, project_id)
+    _render_active_filters_badges(_display_since, _display_until, _display_project_id)
 
     if not st.session_state.get("_lb_triggered"):
         st.info("Click **▶️ Run Leaderboard Analysis** to fetch data for selected team(s).")
         return
 
-    # ── Fetch ─────────────────────────────────────────────────────────────
-    team_data: dict = {}
-    progress = st.progress(0, text="Fetching team data…")
+    # ── Fetch (only when button was just pressed) ─────────────────────────
+    if run_button:
+        team_data = {}
+        progress = st.progress(0, text="Fetching team data…")
 
-    for idx, team in enumerate(teams):
-        team_name = team["team_name"]
-        usernames = [m["username"] for m in team.get("members", []) if m.get("username")]
+        for idx, team in enumerate(teams):
+            team_name = team["team_name"]
+            usernames = [m["username"] for m in team.get("members", []) if m.get("username")]
 
-        if not usernames:
-            team_data[team_name] = (team, [], _aggregate_team_totals([]))
-            progress.progress((idx + 1) / len(teams), text=f"Skipped: {team_name}")
-            continue
+            if not usernames:
+                team_data[team_name] = (team, [], _aggregate_team_totals([]))
+                progress.progress((idx + 1) / len(teams), text=f"Skipped: {team_name}")
+                continue
 
-        with st.spinner(f"Fetching **{team_name}** ({len(usernames)} member(s))…"):
-            try:
-                if project_id:
-                    results = process_batch_users_project_filtered(
-                        client,
-                        usernames,
-                        project_id,
-                        since=since_iso,
-                        until=until_iso,
-                    )
-                else:
-                    results = process_batch_users(
-                        client,
-                        usernames,
-                        since=since_iso,
-                        until=until_iso,
-                    )
-            except Exception as exc:
-                st.warning(f"⚠️ Could not fetch data for **{team_name}**: {exc}")
-                results = []
+            with st.spinner(f"Fetching **{team_name}** ({len(usernames)} member(s))…"):
+                try:
+                    if _display_project_id:
+                        results = process_batch_users_project_filtered(
+                            client,
+                            usernames,
+                            _display_project_id,
+                            since=_display_since,
+                            until=_display_until,
+                        )
+                    else:
+                        results = process_batch_users(
+                            client,
+                            usernames,
+                            since=_display_since,
+                            until=_display_until,
+                        )
+                except Exception as exc:
+                    st.warning(f"⚠️ Could not fetch data for **{team_name}**: {exc}")
+                    results = []
 
-        member_rows = [_extract_member_row(r) for r in results if r]
-        totals = _aggregate_team_totals(member_rows)
-        team_data[team_name] = (team, member_rows, totals)
-        progress.progress((idx + 1) / len(teams), text=f"Done: {team_name}")
+            member_rows = [_extract_member_row(r) for r in results if r]
+            totals = _aggregate_team_totals(member_rows)
+            team_data[team_name] = (team, member_rows, totals)
+            progress.progress((idx + 1) / len(teams), text=f"Done: {team_name}")
 
-    progress.empty()
+        progress.empty()
 
+        if not team_data:
+            st.error("No team data could be fetched. Check your GitLab connection.")
+            return
+
+        # Persist results and mark as run so future page switches use cache.
+        st.session_state["_lb_cached_results"] = team_data
+        st.session_state["_lb_has_run"] = True
+        st.session_state["_lb_last_ranking_rows"] = _build_ranking_rows(team_data)
+
+    # ── Guard: cached results must be present ─────────────────────────────
     if not team_data:
-        st.error("No team data could be fetched. Check your GitLab connection.")
+        st.info("Click **▶️ Run Leaderboard Analysis** to fetch data for selected team(s).")
         return
 
+<<<<<<< Updated upstream
     # Persist compact ranking summary for the separate ranking page.
     st.session_state["_lb_last_ranking_rows"] = _build_ranking_rows(team_data)
     st.session_state["_lb_last_individual_rows"] = _build_individual_rows(team_data)
 
+=======
+>>>>>>> Stashed changes
     # ── Render results ────────────────────────────────────────────────────
     st.markdown('<div class="lb-section-label">📊 Team Results</div>', unsafe_allow_html=True)
     for team_name, (meta, member_rows, totals) in team_data.items():
