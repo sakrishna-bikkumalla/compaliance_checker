@@ -1,7 +1,7 @@
 """
-Team Leaderboard Mode — Dynamic Team Creation + Edit
-------------------------------------------------------
-Supports creating and editing teams via UI with full session state persistence.
+Team Leaderboard Mode — Backend Team Selection
+----------------------------------------------
+Uses backend-managed team definitions and a UI dropdown to select one team or all teams.
 Fetches analytics via process_batch_users() and renders a ranked leaderboard.
 
 Score formula:
@@ -31,6 +31,134 @@ from gitlab_utils.batch import (
 )
 from gitlab_utils.projects import ProjectResolutionError, resolve_project
 
+BACKEND_TEAMS: list[dict] = [
+    {
+        "team_name": "Dev 3",
+        "project_name": "Dev 3",
+        "members": [
+            {"name": "Sai Krishna", "username": "saikrishna_b"},
+            {"name": "Bhavitha", "username": "MohanaSriBhavitha"},
+            {"name": "Madavarapu Sai Harshavardhan", "username": "Saiharshavardhan"},
+        ],
+    },
+    {
+        "team_name": "Trinity",
+        "project_name": "Trinity",
+        "members": [
+            {"name": "Praneeth Ashish", "username": "praneethashish"},
+            {"name": "Vaishnavi Prabhala", "username": "vai5h"},
+            {"name": "Greeshma Kanukunta", "username": "kanukuntagreeshma2004"},
+        ],
+    },
+    {
+        "team_name": "Sudo",
+        "project_name": "Sudo",
+        "members": [
+            {"name": "Balannagari Vandana Reddy", "username": "vandana1735"},
+            {"name": "Rajuldev Vandana", "username": "vandana_rajuldev"},
+            {"name": "Challa lakshmi Pavani", "username": "lakshmipavani_20"},
+        ],
+    },
+    {
+        "team_name": "Trishul",
+        "project_name": "Trishul",
+        "members": [
+            {"name": "Mukthananad Reddy", "username": "Mukthanand21"},
+            {"name": "Lanke Shanmukha Varma", "username": "Shanmukh16"},
+            {"name": "Maddula Rushika Sritha", "username": "Rushika_1105"},
+        ],
+    },
+    {
+        "team_name": "BrainStorm",
+        "project_name": "BrainStorm",
+        "members": [
+            {"name": "Daliboina satish", "username": "satish05"},
+            {"name": "Damanagari Sathwika", "username": "Sathwikareddy_Damanagari"},
+            {"name": "C.Sahasra", "username": "Sahasraa"},
+        ],
+    },
+    {
+        "team_name": "Core",
+        "project_name": "Core",
+        "members": [
+            {"name": "Abhilash", "username": "Abhilash653"},
+            {"name": "kanda swarna rathna madhuri", "username": "swarna_4539"},
+            {"name": "Laxman Reddy", "username": "laxmanredddypatlolla"},
+        ],
+    },
+    {
+        "team_name": "Magnum",
+        "project_name": "Magnum",
+        "members": [
+            {"name": "Lagichetty Kushal", "username": "LagichettyKushal"},
+            {"name": "Lakshy Yarlagadda", "username": "Lakshy"},
+            {"name": "Nagi Reddy Pavani", "username": "pavaninagireddi"},
+        ],
+    },
+    {
+        "team_name": "TrioForce",
+        "project_name": "TrioForce",
+        "members": [
+            {"name": "Aravindswamy", "username": "aravindswamy"},
+            {"name": "Suma Reddy", "username": "Suma2304"},
+            {"name": "Koushik Reddy", "username": "koushik_18"},
+        ],
+    },
+    {
+        "team_name": "Techops",
+        "project_name": "Techops",
+        "members": [
+            {"name": "Prabhu kumari", "username": "kumari123"},
+            {"name": "Habiba", "username": "Habeebunissa"},
+            {"name": "Chesetti Sai Jeevana Jyothi", "username": "jeevana_31"},
+        ],
+    },
+    {
+        "team_name": "Mind ops",
+        "project_name": "Mind ops",
+        "members": [
+            {"name": "Bhaskar", "username": "Bhaskar_Battula"},
+            {"name": "Sai Teja", "username": "saiteja3005"},
+            {"name": "Satya Pranavanadh", "username": "Pranav_rs"},
+        ],
+    },
+]
+
+
+def get_all_teams() -> list[dict]:
+    """Return all backend-managed teams as a defensive copy."""
+    return copy.deepcopy(BACKEND_TEAMS)
+
+
+def get_team_by_name(team_name: str) -> dict | None:
+    """Return one backend-managed team by name, if present."""
+    normalized = (team_name or "").strip().lower()
+    for team in BACKEND_TEAMS:
+        if team["team_name"].strip().lower() == normalized:
+            return copy.deepcopy(team)
+    return None
+
+
+def _get_combined_teams() -> tuple[list[dict], list[dict], list[dict]]:
+    """Return (backend_teams, custom_teams, combined_unique_teams)."""
+    backend_teams = get_all_teams()
+    custom_teams: list[dict] = copy.deepcopy(st.session_state.get("teams", []))
+
+    combined: list[dict] = []
+    seen_team_names: set[str] = set()
+    for team in backend_teams + custom_teams:
+        team_name = (team.get("team_name") or "").strip()
+        if not team_name:
+            continue
+        key = team_name.lower()
+        if key in seen_team_names:
+            continue
+        seen_team_names.add(key)
+        combined.append(team)
+
+    return backend_teams, custom_teams, combined
+
+
 # ---------------------------------------------------------------------------
 # Session State Bootstrap
 # ---------------------------------------------------------------------------
@@ -53,6 +181,7 @@ def _init_state() -> None:
         "_lb_clear_dates_requested": False,  # one-shot flag to clear date widgets safely
         "_lb_project_id": None,  # Resolved int or None
         "_lb_project_input": "",  # Raw string input
+        "_lb_selected_team": "All Teams",
         "_lb_page": "Workspace",
         "_lb_last_ranking_rows": [],
     }
@@ -264,10 +393,16 @@ def _aggregate_team_totals(member_rows: list[dict]) -> dict:
 
 def _team_name_exists(name: str, exclude_index: int | None = None) -> bool:
     """Return True if a team with this name already exists (optionally skipping one index)."""
+    normalized = name.strip().lower()
+
     for idx, t in enumerate(st.session_state["teams"]):
         if idx == exclude_index:
             continue
-        if t["team_name"].strip().lower() == name.strip().lower():
+        if t["team_name"].strip().lower() == normalized:
+            return True
+
+    for t in BACKEND_TEAMS:
+        if t["team_name"].strip().lower() == normalized:
             return True
     return False
 
@@ -310,6 +445,7 @@ def _validate_json_teams(raw: dict) -> tuple[list[dict] | None, str]:
         return None, '"teams" list is empty.'
 
     existing_names = {t["team_name"].strip().lower() for t in st.session_state["teams"]}
+    existing_names.update(t["team_name"].strip().lower() for t in BACKEND_TEAMS)
     seen_names: set[str] = set()
 
     for ti, team in enumerate(teams, start=1):
@@ -435,16 +571,27 @@ def _render_json_upload() -> None:
 
 def _render_create_team_form() -> None:
     """Expandable form for creating a brand-new team."""
-    # Don't show either form while an edit is active
-    if st.session_state.get("edit_team_index") is not None:
-        return
+    backend_teams, custom_teams, all_teams = _get_combined_teams()
+    is_editing = st.session_state.get("edit_team_index") is not None
 
-    # Two-button header: Create | Upload JSON
-    btn_col1, btn_col2 = st.columns([1, 1])
+    team_options = ["All Teams"] + [team["team_name"] for team in all_teams]
+    current_selection = st.session_state.get("_lb_selected_team", "All Teams")
+    if current_selection not in team_options:
+        st.session_state["_lb_selected_team"] = "All Teams"
 
+    # Top controls in one row: Select Team | Create | Upload
+    sel_col, btn_col1, btn_col2 = st.columns([2, 1, 1])
+    with sel_col:
+        st.selectbox(
+            "Select Team",
+            options=team_options,
+            key="_lb_selected_team",
+            label_visibility="collapsed",
+            help="Choose a specific team or keep All Teams to analyze everyone.",
+        )
     with btn_col1:
         create_label = "✖ Cancel" if st.session_state["_lb_show_create_form"] else "➕ Create New Team"
-        if st.button(create_label, key="_lb_toggle_form", use_container_width=True):
+        if st.button(create_label, key="_lb_toggle_form", use_container_width=True, disabled=is_editing):
             st.session_state["_lb_show_create_form"] = not st.session_state["_lb_show_create_form"]
             st.session_state["_lb_show_upload_form"] = False  # close the other panel
             st.session_state["_lb_draft_members"] = []
@@ -452,11 +599,20 @@ def _render_create_team_form() -> None:
 
     with btn_col2:
         upload_label = "✖ Cancel Upload" if st.session_state["_lb_show_upload_form"] else "📂 Add All Teams Using JSON"
-        if st.button(upload_label, key="_lb_toggle_upload", use_container_width=True):
+        if st.button(upload_label, key="_lb_toggle_upload", use_container_width=True, disabled=is_editing):
             st.session_state["_lb_show_upload_form"] = not st.session_state["_lb_show_upload_form"]
             st.session_state["_lb_show_create_form"] = False  # close the other panel
             st.session_state["_lb_draft_members"] = []
             st.rerun()
+
+    st.caption(
+        "Configured teams: "
+        f"Backend **{len(backend_teams)}** + Custom **{len(custom_teams)}** | "
+        f"Available in dropdown: **{len(all_teams)}**"
+    )
+
+    if is_editing:
+        return
 
     # Show whichever panel is active
     if st.session_state["_lb_show_upload_form"]:
@@ -1453,27 +1609,39 @@ def render_team_leaderboard(client) -> None:
         _render_ranking_page()
         return
 
-    # ── Section 1: Create Team ────────────────────────────────────────────
+    # ── Section 1: Create / Upload Teams (existing options) ───────────────
     _render_create_team_form()
     st.divider()
 
-    # ── Section 2: Teams Overview (with inline edit) ──────────────────────
-    st.markdown("### 📋 Configured Teams")
+    st.markdown("### 📋 Custom Teams")
     _render_teams_overview()
     st.divider()
 
-    # ── Section 3: Analysis ───────────────────────────────────────────────
-    teams: list[dict] = st.session_state["teams"]
+    # ── Section 2: Team Selection (from top controls) ─────────────────────
+    backend_teams, custom_teams, all_teams = _get_combined_teams()
+    if not all_teams:
+        st.error("No teams are configured.")
+        return
+
+    selected_team_name = st.session_state.get("_lb_selected_team", "All Teams")
+
+    if selected_team_name == "All Teams":
+        teams = all_teams
+    else:
+        selected_team = next(
+            (team for team in all_teams if team.get("team_name", "").strip().lower() == selected_team_name.lower()),
+            None,
+        )
+        teams = [selected_team] if selected_team else []
+
     if not teams:
-        st.info("Add at least one team above to enable analysis.")
+        st.error("Selected team is not available in backend configuration.")
         return
 
-    # Disable Run while an edit is active
-    if st.session_state.get("edit_team_index") is not None:
-        st.info("💡 Finish editing the team above before running analysis.")
-        return
+    st.caption(f"Selected for run: **{len(teams)}**")
+    st.divider()
 
-    # ── Filter card ───────────────────────────────────────────────────────
+    # ── Section 3: Analysis Filters ───────────────────────────────────────
     st.markdown(
         '<div class="lb-filter-card"><div class="lb-filter-title">🔎 Filters</div>',
         unsafe_allow_html=True,
@@ -1508,7 +1676,7 @@ def render_team_leaderboard(client) -> None:
     _render_active_filters_badges(since_iso, until_iso, project_id)
 
     if not st.session_state.get("_lb_triggered"):
-        st.info("Click **▶️ Run Leaderboard Analysis** to fetch data for all teams.")
+        st.info("Click **▶️ Run Leaderboard Analysis** to fetch data for selected team(s).")
         return
 
     # ── Fetch ─────────────────────────────────────────────────────────────
