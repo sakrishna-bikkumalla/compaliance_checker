@@ -1465,7 +1465,8 @@ def _build_individual_rows(team_data: dict) -> list[dict]:
 
     def _best_consistency(badge_name: str) -> None:
         candidates = [
-            m for m in all_members
+            m
+            for m in all_members
             if _can_badge(m["Username"])
             and badge_name not in member_badges[m["Username"]]
             and m["Total Commits"] > 0
@@ -1476,10 +1477,10 @@ def _build_individual_rows(team_data: dict) -> list[dict]:
             return
         best = min(
             candidates,
-            key=lambda m: statistics.stdev(
-                [m["Total Commits"], m["MRs Merged"], m["Issues Closed"]]
-            )
-            / max(statistics.mean([m["Total Commits"], m["MRs Merged"], m["Issues Closed"]]), 1),
+            key=lambda m: (
+                statistics.stdev([m["Total Commits"], m["MRs Merged"], m["Issues Closed"]])
+                / max(statistics.mean([m["Total Commits"], m["MRs Merged"], m["Issues Closed"]]), 1)
+            ),
         )
         _add_badge(best["Username"], badge_name)
 
@@ -1714,20 +1715,11 @@ def _render_individual_table_html(individual_rows: list[dict]) -> None:
         for badge_name in badges:
             svg = _load_individual_badge_svg(badge_name)
             if svg:
-                label = _badge_display_names.get(
-                    badge_name, badge_name.replace("_", " ").title()
-                )
+                label = _badge_display_names.get(badge_name, badge_name.replace("_", " ").title())
                 badge_parts.append(
-                    f'<div class="lb-badge">'
-                    f'{svg}'
-                    f'<span class="lb-badge-label">{escape(label)}</span>'
-                    f'</div>'
+                    f'<div class="lb-badge">{svg}<span class="lb-badge-label">{escape(label)}</span></div>'
                 )
-        badge_html = (
-            f'<div class="lb-badges-row">{"".join(badge_parts)}</div>'
-            if badge_parts
-            else ""
-        )
+        badge_html = f'<div class="lb-badges-row">{"".join(badge_parts)}</div>' if badge_parts else ""
 
         table_rows.append(
             "<tr>"
@@ -1979,13 +1971,10 @@ def render_team_leaderboard(client) -> None:
         st.info("Click **▶️ Run Leaderboard Analysis** to fetch data for selected team(s).")
         return
 
-<<<<<<< Updated upstream
     # Persist compact ranking summary for the separate ranking page.
     st.session_state["_lb_last_ranking_rows"] = _build_ranking_rows(team_data)
     st.session_state["_lb_last_individual_rows"] = _build_individual_rows(team_data)
 
-=======
->>>>>>> Stashed changes
     # ── Render results ────────────────────────────────────────────────────
     st.markdown('<div class="lb-section-label">📊 Team Results</div>', unsafe_allow_html=True)
     for team_name, (meta, member_rows, totals) in team_data.items():
