@@ -187,7 +187,6 @@ def _init_state() -> None:
         "_lb_last_ranking_rows": [],
         "_lb_cached_results": None,
         "_lb_last_filters": None,
-
     }
     for key, default in defaults.items():
         if key not in st.session_state:
@@ -1994,20 +1993,21 @@ def render_team_leaderboard(client) -> None:
     # ── Active filter badges ──────────────────────────────────────────────
     _render_active_filters_badges(since_iso, until_iso, project_id)
 
-
     # ── Fetch (Strictly only if button clicked) ───────────────────────────
     if run_button_clicked:
         team_data = {}
         progress = st.progress(0, text="Fetching team data…")
 
-    for idx, team in enumerate(teams):
-        team_name = team["team_name"]
-        usernames = [m["username"] for m in team.get("members", []) if m.get("username")]
+        for idx, team in enumerate(teams):
+            team_name = team["team_name"]
+            usernames = [m["username"] for m in team.get("members", []) if m.get("username")]
 
-        if not usernames:
-            team_data[team_name] = (team, [], _aggregate_team_totals([]))
-            progress.progress((idx + 1) / len(teams), text=f"Skipped: {team_name}")
-            continue
+            if not usernames:
+                team_data[team_name] = (team, [], _aggregate_team_totals([]))
+                progress.progress((idx + 1) / len(teams), text=f"Skipped: {team_name}")
+                continue
+
+            results = []
             with st.spinner(f"Fetching **{team_name}** ({len(usernames)} member(s))…"):
                 try:
                     if project_id:
@@ -2029,12 +2029,12 @@ def render_team_leaderboard(client) -> None:
                     st.warning(f"⚠️ Could not fetch data for **{team_name}**: {exc}")
                     results = []
 
-        member_rows = [_extract_member_row(r) for r in results if r]
-        totals = _aggregate_team_totals(member_rows)
-        team_data[team_name] = (team, member_rows, totals)
-        progress.progress((idx + 1) / len(teams), text=f"Done: {team_name}")
+            member_rows = [_extract_member_row(r) for r in results if r]
+            totals = _aggregate_team_totals(member_rows)
+            team_data[team_name] = (team, member_rows, totals)
+            progress.progress((idx + 1) / len(teams), text=f"Done: {team_name}")
 
-    progress.empty()
+        progress.empty()
 
         if not team_data:
             st.error("No team data could be fetched. Check your GitLab connection.")
