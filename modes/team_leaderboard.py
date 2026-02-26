@@ -185,6 +185,8 @@ def _init_state() -> None:
         "_lb_selected_team": "All Teams",
         "_lb_page": "Workspace",
         "_lb_last_ranking_rows": [],
+        "_lb_cached_results": None,
+        "_lb_last_filters": None,
     }
     for key, default in defaults.items():
         if key not in st.session_state:
@@ -1374,10 +1376,6 @@ def _render_overall_leaderboard(team_data: dict) -> None:
     st.dataframe(df_lb, use_container_width=True, hide_index=True)
     st.divider()
 
-    st.markdown("### 📊 Score Comparison")
-    if not df_lb.empty:
-        st.bar_chart(df_lb.set_index("Team")[["Team Score"]])
-
 
 def _build_ranking_rows(team_data: dict) -> list[dict]:
     """Create sorted ranking rows from already aggregated team totals."""
@@ -1776,6 +1774,16 @@ def _render_ranking_page() -> None:
     else:
         st.info("No individual data available yet.")
 
+    # ── Score Comparison Chart ─────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 📊 Score Comparison")
+    if ranked_rows:
+        df_chart = pd.DataFrame(ranked_rows)
+        # Map back to the expected columns for the chart
+        if not df_chart.empty:
+            chart_data = df_chart.rename(columns={"Team Name": "Team", "Total Score": "Team Score"})
+            st.bar_chart(chart_data.set_index("Team")[["Team Score"]])
+
 
 # ---------------------------------------------------------------------------
 # Main Entry Point
@@ -1787,6 +1795,11 @@ def render_team_leaderboard(client) -> None:
     _init_state()
 
     _inject_dark_css()
+
+    if "_lb_cached_results" not in st.session_state:
+        st.session_state["_lb_cached_results"] = None
+    if "_lb_last_filters" not in st.session_state:
+        st.session_state["_lb_last_filters"] = None
 
     # ── Page header card ─────────────────────────────────────────────────
     st.markdown(
@@ -1800,14 +1813,90 @@ def render_team_leaderboard(client) -> None:
         unsafe_allow_html=True,
     )
 
-    page = st.radio(
-        "Leaderboard Pages",
-        ["Workspace", "Leaderboard Ranking"],
-        index=0 if st.session_state.get("_lb_page", "Workspace") == "Workspace" else 1,
-        horizontal=True,
-        key="_lb_page_selector",
+    # ── Scoped UI Restyling CSS ──────────────────────────────────────────
+    st.markdown(
+        """
+        <style>
+        /* Target buttons following the toggle marker */
+        div:has(> .lb-toggle-container) + div button {
+            border-radius: 10px !important;
+            font-weight: 600 !important;
+            padding: 0.75rem 1rem !important;
+            transition: all 0.2s ease-in-out !important;
+            border: none !important;
+            height: 3rem !important;
+        }
+
+        /* Active Toggle (Primary) */
+        div:has(> .lb-toggle-container) + div button[kind="primary"] {
+            background-color: #d32f2f !important;
+            color: white !important;
+            box-shadow: 0 4px 12px rgba(211, 47, 47, 0.4) !important;
+        }
+
+        /* Inactive Toggle (Secondary) */
+        div:has(> .lb-toggle-container) + div button[kind="secondary"] {
+            background-color: #2c2c2c !important;
+            color: #888 !important;
+        }
+
+        div:has(> .lb-toggle-container) + div button[kind="secondary"]:hover {
+            background-color: #3d3d3d !important;
+            color: #fff !important;
+            transform: translateY(-1px);
+        }
+
+        /* Target button following the run marker */
+        div:has(> .lb-run-btn) + div button {
+            border-radius: 10px !important;
+            font-weight: 700 !important;
+            padding: 0.8rem !important;
+            transition: all 0.2s ease-in-out !important;
+            background-color: #d32f2f !important;
+            color: white !important;
+            box-shadow: 0 4px 12px rgba(211, 47, 47, 0.3) !important;
+            width: 100% !important;
+            border: none !important;
+            height: 3.5rem !important;
+        }
+
+        div:has(> .lb-run-btn) + div button:hover {
+            background-color: #b71c1c !important;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(183, 28, 28, 0.5) !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
-    st.session_state["_lb_page"] = page
+
+    # ── Page selector (Button Toggle) ────────────────────────────────────
+    st.markdown('<div class="lb-toggle-container">', unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    current_page = st.session_state.get("_lb_page", "Workspace")
+
+    with col1:
+        if st.button(
+            "Workspace",
+            use_container_width=True,
+            key="_btn_workspace",
+            type="secondary" if current_page == "Leaderboard Ranking" else "primary",
+        ):
+            st.session_state["_lb_page"] = "Workspace"
+            st.rerun()
+
+    with col2:
+        if st.button(
+            "Leaderboard Ranking",
+            use_container_width=True,
+            key="_btn_ranking",
+            type="secondary" if current_page == "Workspace" else "primary",
+        ):
+            st.session_state["_lb_page"] = "Leaderboard Ranking"
+            st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    page = st.session_state["_lb_page"]
     st.divider()
 
     if page == "Leaderboard Ranking":
@@ -1856,8 +1945,24 @@ def render_team_leaderboard(client) -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
     # ── Run button ────────────────────────────────────────────────────────
-    if st.button("▶️ Run Leaderboard Analysis", type="primary", key="_lb_run_btn"):
+    st.markdown('<div class="lb-run-btn">', unsafe_allow_html=True)
+    run_button_clicked = st.button("▶️ Run Leaderboard Analysis", type="primary", key="_lb_run_btn")
+    st.markdown("</div>", unsafe_allow_html=True)
+    if run_button_clicked:
         st.session_state["_lb_triggered"] = True
+
+    # ── Capture Filter Snapshot ───────────────────────────────────────────
+    current_filters = {
+        "teams": teams,
+        "since": since_iso,
+        "until": until_iso,
+        "project_id": project_id,
+    }
+
+    # ── Prevent Recompute On Page Switch ──────────────────────────────────
+    # We display whatever is in the cache regardless of current filter states.
+    # Re-analysis is strictly triggered only by the Run button.
+    team_data = st.session_state.get("_lb_cached_results")
 
     # ── Active filters display (read-only, updates on every rerun) ────────
     _active_filters: list[str] = []
@@ -1877,61 +1982,74 @@ def render_team_leaderboard(client) -> None:
         st.markdown("🔎 **Active Filters:**\n\n" + "\n\n".join(_active_filters))
     else:
         st.info("🔎 **Active Filters:** None (Showing full history across all projects)")
+
+    # ── Display stale-cache warning if filters changed ────────────────────
+    if team_data is not None and st.session_state.get("_lb_last_filters") != current_filters:
+        st.warning(
+            "⚠️ **Filters have changed.** Displaying results from last analysis run. "
+            "Click **Run Leaderboard Analysis** to update."
+        )
+
     # ── Active filter badges ──────────────────────────────────────────────
     _render_active_filters_badges(since_iso, until_iso, project_id)
 
-    if not st.session_state.get("_lb_triggered"):
+    # ── Fetch (Strictly only if button clicked) ───────────────────────────
+    if run_button_clicked:
+        team_data = {}
+        progress = st.progress(0, text="Fetching team data…")
+
+        for idx, team in enumerate(teams):
+            team_name = team["team_name"]
+            usernames = [m["username"] for m in team.get("members", []) if m.get("username")]
+
+            if not usernames:
+                team_data[team_name] = (team, [], _aggregate_team_totals([]))
+                progress.progress((idx + 1) / len(teams), text=f"Skipped: {team_name}")
+                continue
+
+            with st.spinner(f"Fetching **{team_name}** ({len(usernames)} member(s))…"):
+                try:
+                    if project_id:
+                        results = process_batch_users_project_filtered(
+                            client,
+                            usernames,
+                            project_id,
+                            since=since_iso,
+                            until=until_iso,
+                        )
+                    else:
+                        results = process_batch_users(
+                            client,
+                            usernames,
+                            since=since_iso,
+                            until=until_iso,
+                        )
+                except Exception as exc:
+                    st.warning(f"⚠️ Could not fetch data for **{team_name}**: {exc}")
+                    results = []
+
+            member_rows = [_extract_member_row(r) for r in results if r]
+            totals = _aggregate_team_totals(member_rows)
+            team_data[team_name] = (team, member_rows, totals)
+            progress.progress((idx + 1) / len(teams), text=f"Done: {team_name}")
+
+        progress.empty()
+
+        if not team_data:
+            st.error("No team data could be fetched. Check your GitLab connection.")
+            return
+
+        # Cache results
+        st.session_state["_lb_cached_results"] = team_data
+        st.session_state["_lb_last_filters"] = current_filters
+
+        # Persist compact ranking summary for the separate ranking page.
+        st.session_state["_lb_last_ranking_rows"] = _build_ranking_rows(team_data)
+        st.session_state["_lb_last_individual_rows"] = _build_individual_rows(team_data)
+
+    if team_data is None:
         st.info("Click **▶️ Run Leaderboard Analysis** to fetch data for selected team(s).")
         return
-
-    # ── Fetch ─────────────────────────────────────────────────────────────
-    team_data: dict = {}
-    progress = st.progress(0, text="Fetching team data…")
-
-    for idx, team in enumerate(teams):
-        team_name = team["team_name"]
-        usernames = [m["username"] for m in team.get("members", []) if m.get("username")]
-
-        if not usernames:
-            team_data[team_name] = (team, [], _aggregate_team_totals([]))
-            progress.progress((idx + 1) / len(teams), text=f"Skipped: {team_name}")
-            continue
-
-        with st.spinner(f"Fetching **{team_name}** ({len(usernames)} member(s))…"):
-            try:
-                if project_id:
-                    results = process_batch_users_project_filtered(
-                        client,
-                        usernames,
-                        project_id,
-                        since=since_iso,
-                        until=until_iso,
-                    )
-                else:
-                    results = process_batch_users(
-                        client,
-                        usernames,
-                        since=since_iso,
-                        until=until_iso,
-                    )
-            except Exception as exc:
-                st.warning(f"⚠️ Could not fetch data for **{team_name}**: {exc}")
-                results = []
-
-        member_rows = [_extract_member_row(r) for r in results if r]
-        totals = _aggregate_team_totals(member_rows)
-        team_data[team_name] = (team, member_rows, totals)
-        progress.progress((idx + 1) / len(teams), text=f"Done: {team_name}")
-
-    progress.empty()
-
-    if not team_data:
-        st.error("No team data could be fetched. Check your GitLab connection.")
-        return
-
-    # Persist compact ranking summary for the separate ranking page.
-    st.session_state["_lb_last_ranking_rows"] = _build_ranking_rows(team_data)
-    st.session_state["_lb_last_individual_rows"] = _build_individual_rows(team_data)
 
     # ── Render results ────────────────────────────────────────────────────
     st.markdown('<div class="lb-section-label">📊 Team Results</div>', unsafe_allow_html=True)
