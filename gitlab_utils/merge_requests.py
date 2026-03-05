@@ -10,7 +10,8 @@ def get_user_mrs(client, user_id, since=None, until=None):
 
     Returns:
       - mrs_list: List of MR dicts
-      - stats: Dict {total, merged, closed, opened, pending, assigned_mrs}
+      - stats: Dict {total, merged, closed, opened, pending,
+                     assigned_mrs, assigned_merged, assigned_closed, assigned_opened}
     """
     mrs_list = []
     seen_ids = set()
@@ -23,6 +24,9 @@ def get_user_mrs(client, user_id, since=None, until=None):
         "opened": 0,
         "pending": 0,
         "assigned_mrs": 0,
+        "assigned_merged": 0,
+        "assigned_closed": 0,
+        "assigned_opened": 0,
     }
 
     # Build optional date filter fragment added to every request
@@ -41,13 +45,19 @@ def get_user_mrs(client, user_id, since=None, until=None):
                 if item_id is None:
                     continue
 
-                # Track assigned IDs separately (before dedup check)
+                state = item.get("state")
+
+                # State-specific tracking for Assigned role
                 if role_label == "Assigned":
                     assigned_ids.add(item_id)
+                    if state == "merged":
+                        stats["assigned_merged"] += 1
+                    elif state == "closed":
+                        stats["assigned_closed"] += 1
+                    elif state == "opened":
+                        stats["assigned_opened"] += 1
 
                 if item_id not in seen_ids:
-                    state = item.get("state")
-
                     mrs_list.append(
                         {
                             "title": item.get("title"),
@@ -90,7 +100,8 @@ def get_user_mrs_project(client, project_id, user_id, since=None, until=None):
 
     Returns:
       - mrs_list: List of MR dicts
-      - stats: Dict {total, merged, closed, opened, pending, assigned_mrs}
+      - stats: Dict {total, merged, closed, opened, pending,
+                     assigned_mrs, assigned_merged, assigned_closed, assigned_opened}
     """
     mrs_list = []
     seen_ids: set = set()
@@ -103,6 +114,9 @@ def get_user_mrs_project(client, project_id, user_id, since=None, until=None):
         "opened": 0,
         "pending": 0,
         "assigned_mrs": 0,
+        "assigned_merged": 0,
+        "assigned_closed": 0,
+        "assigned_opened": 0,
     }
 
     date_params: dict = {}
@@ -125,8 +139,16 @@ def get_user_mrs_project(client, project_id, user_id, since=None, until=None):
                 if item_id is None:
                     continue
 
+                state = item.get("state")
+
                 if role_label == "Assigned":
                     assigned_ids.add(item_id)
+                    if state == "merged":
+                        stats["assigned_merged"] += 1
+                    elif state == "closed":
+                        stats["assigned_closed"] += 1
+                    elif state == "opened":
+                        stats["assigned_opened"] += 1
 
                 if item_id not in seen_ids:
                     state = item.get("state")
