@@ -602,7 +602,7 @@ def _render_create_team_form() -> None:
             help="Choose a specific team or keep All Teams to analyze everyone.",
         )
     with btn_col1:
-        create_label = "✖ Cancel" if st.session_state["_lb_show_create_form"] else "➕ Create New Team"
+        create_label = "✖ Cancel" if st.session_state["_lb_show_create_form"] else "➕ Append New Team"
         if st.button(create_label, key="_lb_toggle_form", use_container_width=True, disabled=is_editing):
             st.session_state["_lb_show_create_form"] = not st.session_state["_lb_show_create_form"]
             st.session_state["_lb_show_upload_form"] = False  # close the other panel
