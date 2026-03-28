@@ -342,6 +342,9 @@ def _extract_member_row(result: dict) -> dict:
             "Assigned Issues": 0,
             "Groups": 0,
             "Score": 0,
+            "mr_list": [],
+            "issue_list": [],
+            "commit_list": [],
             "Error": result.get("error", "Unknown error"),
         }
 
@@ -374,6 +377,9 @@ def _extract_member_row(result: dict) -> dict:
         "Assigned Issues": i.get("assigned_issues", 0),
         "Groups": len(data.get("groups", [])),
         "Score": _calculate_score(total_commits, merged_mrs, issues_closed),
+        "mr_list": data.get("mrs", []),
+        "issue_list": data.get("issues", []),
+        "commit_list": data.get("commits", []),
     }
 
 
@@ -1348,6 +1354,40 @@ def _render_team_result(team_name: str, project_name: str, member_rows: list[dic
     df = pd.DataFrame(member_rows)
     available = [c for c in display_cols if c in df.columns]
     st.dataframe(df[available], use_container_width=True, hide_index=True)
+    
+    with st.expander("🔍 Detailed Contributions"):
+        for row in member_rows:
+            if row.get("Status") != "Success":
+                continue
+            username = row["Username"]
+            st.markdown(f"##### 👤 {username}")
+            
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                mrs = row.get("mr_list", [])
+                with st.expander(f"🔀 MRs ({len(mrs)})"):
+                    if mrs:
+                        for mr in mrs:
+                            st.markdown(f"• [{mr['title']}]({mr['web_url']}) (`{mr['state']}`)")
+                    else:
+                        st.caption("No MRs found")
+            with c2:
+                issues = row.get("issue_list", [])
+                with st.expander(f"🎫 Issues ({len(issues)})"):
+                    if issues:
+                        for issue in issues:
+                            st.markdown(f"• [{issue['title']}]({issue['web_url']}) (`{issue['state']}`)")
+                    else:
+                        st.caption("No issues found")
+            with c3:
+                commits = row.get("commit_list", [])
+                with st.expander(f"💻 Commits ({len(commits)})"):
+                    if commits:
+                        for c in commits:
+                            st.markdown(f"• `{c['short_id']}` {c['message']}")
+                    else:
+                        st.caption("No commits found")
+            st.divider()
 
     group_rows = [
         {"Username": r["Username"], "Groups": r.get("Groups", 0)} for r in member_rows if r.get("Status") == "Success"
